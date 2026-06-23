@@ -1,6 +1,10 @@
+<p align="center">
+  <img src="https://raw.githubusercontent.com/Query-farm/vgi-lightgbm/main/assets/vgi-logo.png" alt="Vector Gateway Interface" height="104">
+</p>
+
 # vgi-lightgbm
 
-[![CI](https://github.com/rustyconover/vgi-lightgbm/actions/workflows/ci.yml/badge.svg)](https://github.com/rustyconover/vgi-lightgbm/actions/workflows/ci.yml)
+[![CI](https://github.com/Query-farm/vgi-lightgbm/actions/workflows/ci.yml/badge.svg)](https://github.com/Query-farm/vgi-lightgbm/actions/workflows/ci.yml)
 
 A [VGI](https://github.com/query-farm/vgi-python) worker that brings
 [LightGBM](https://lightgbm.readthedocs.io/) into DuckDB/SQL: train gradient-boosted

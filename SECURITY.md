@@ -5,7 +5,7 @@
 Please **do not** open a public issue for security problems.
 
 Report vulnerabilities privately via GitHub's
-[private vulnerability reporting](https://github.com/rustyconover/vgi-lightgbm/security/advisories/new)
+[private vulnerability reporting](https://github.com/Query-farm/vgi-lightgbm/security/advisories/new)
 (the **Security → Report a vulnerability** tab on this repository). We aim to
 acknowledge reports within a few business days and will coordinate a fix and
 disclosure timeline with you.
