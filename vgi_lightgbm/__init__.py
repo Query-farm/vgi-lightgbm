@@ -13,9 +13,11 @@ implementation is split by area:
   ``predict`` accepts either ``model_name`` or a ``model`` BLOB.
 - ``typed_models``  -- generated ``fit_lgbm_classifier`` / ``fit_lgbm_regressor``
   exposing LightGBM's real hyperparameters as native typed SQL named arguments
-- ``search``        -- ``grid_search`` over a single estimator (JSON parameter grid)
-- ``importance``    -- LightGBM-specific extras: ``feature_importance`` (split/gain)
-  and SHAP ``explain`` (per-row, long-format feature contributions)
+- ``search``        -- ``grid_search`` / ``randomized_search`` over a
+  discriminated-union estimator + grid argument
+- ``importance``    -- LightGBM-specific extras: ``feature_importance`` (split/gain),
+  ``permutation_importance``, SHAP ``explain`` (per-row, long-format
+  contributions), and ``partial_dependence``
 - ``registry``      -- pluggable model store (local disk now, S3/R2 later); models
   are serialized with LightGBM's native text format, not pickle
 

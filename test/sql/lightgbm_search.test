@@ -1,5 +1,5 @@
 # name: test/sql/lightgbm_search.test
-# description: grid_search leaderboard + refit best-model BLOB
+# description: grid_search / randomized_search union surface + refit best-model BLOB
 # group: [vgi_lightgbm]
 
 require-env VGI_LIGHTGBM_WORKER
@@ -20,8 +20,8 @@ CREATE TEMP VIEW iris_xy AS
 
 query II
 SELECT count(*), max(rank) FROM lightgbm.grid_search((SELECT * FROM iris_xy),
-  estimator => 'lgbm_classifier', target => 'target',
-  grid => '{"num_leaves": [15, 31], "learning_rate": [0.05, 0.1]}', cv => 4);
+  target => 'target', id => 'sample_id',
+  estimator => union_value(lgbm_classifier := {'num_leaves': [15, 31], 'learning_rate': [0.05, 0.1]}), cv => 4);
 ----
 4	4
 
@@ -29,8 +29,8 @@ SELECT count(*), max(rank) FROM lightgbm.grid_search((SELECT * FROM iris_xy),
 
 query I
 SELECT count(*) FROM lightgbm.grid_search((SELECT * FROM iris_xy),
-  estimator => 'lgbm_classifier', target => 'target',
-  grid => '{"num_leaves": [15, 31], "learning_rate": [0.05, 0.1]}', cv => 4)
+  target => 'target', id => 'sample_id',
+  estimator => union_value(lgbm_classifier := {'num_leaves': [15, 31], 'learning_rate': [0.05, 0.1]}), cv => 4)
 WHERE model IS NOT NULL;
 ----
 1
@@ -39,8 +39,8 @@ WHERE model IS NOT NULL;
 
 query I
 SELECT rank = 1 AND mean_score > 0.85 FROM lightgbm.grid_search((SELECT * FROM iris_xy),
-  estimator => 'lgbm_classifier', target => 'target',
-  grid => '{"num_leaves": [15, 31]}', cv => 4)
+  target => 'target', id => 'sample_id',
+  estimator => union_value(lgbm_classifier := {'num_leaves': [15, 31]}), cv => 4)
 WHERE model IS NOT NULL;
 ----
 true
@@ -50,8 +50,8 @@ true
 statement ok
 SET VARIABLE best = (
   SELECT model FROM lightgbm.grid_search((SELECT * FROM iris_xy),
-    estimator => 'lgbm_classifier', target => 'target',
-    grid => '{"num_leaves": [15, 31]}', cv => 4)
+    target => 'target', id => 'sample_id',
+    estimator => union_value(lgbm_classifier := {'num_leaves': [15, 31]}), cv => 4)
   WHERE model IS NOT NULL);
 
 query I
@@ -60,6 +60,51 @@ SELECT count(DISTINCT prediction) FROM lightgbm.predict(
   model => getvariable('best'), id => 'sample_id');
 ----
 3
+
+# ---- only the listed hyperparameters are searched; unset ones stay at defaults ----
+
+query I
+SELECT count(*) FROM lightgbm.grid_search((SELECT * FROM iris_xy),
+  target => 'target', id => 'sample_id',
+  estimator => union_value(lgbm_classifier := {'max_depth': [0, 3, 5]}), cv => 3);
+----
+3
+
+# ---- randomized_search samples n_iter combinations, capped at the grid size ----
+
+# grid has 3 x 3 = 9 combos; n_iter 4 -> 4 rows
+query I
+SELECT count(*) FROM lightgbm.randomized_search((SELECT * FROM iris_xy),
+  target => 'target', id => 'sample_id', n_iter => 4,
+  estimator => union_value(lgbm_classifier := {'num_leaves': [7, 15, 31], 'learning_rate': [0.03, 0.05, 0.1]}), cv => 3);
+----
+4
+
+# n_iter larger than the grid is capped to the grid size (here 4)
+query I
+SELECT count(*) FROM lightgbm.randomized_search((SELECT * FROM iris_xy),
+  target => 'target', id => 'sample_id', n_iter => 100,
+  estimator => union_value(lgbm_classifier := {'num_leaves': [15, 31], 'learning_rate': [0.05, 0.1]}), cv => 3);
+----
+4
+
+# randomized_search also carries exactly one refit best-model BLOB
+query I
+SELECT count(*) FROM lightgbm.randomized_search((SELECT * FROM iris_xy),
+  target => 'target', id => 'sample_id', n_iter => 3,
+  estimator => union_value(lgbm_classifier := {'num_leaves': [15, 31, 63]}), cv => 3)
+WHERE model IS NOT NULL;
+----
+1
+
+# ---- a regressor member is searched the same way ----
+
+query I
+SELECT count(*) = 2 FROM lightgbm.grid_search((SELECT * FROM lightgbm.diabetes()),
+  target => 'target', id => 'sample_id',
+  estimator => union_value(lgbm_regressor := {'num_leaves': [15, 31]}), cv => 3);
+----
+true
 
 statement ok
 DETACH lightgbm;
