@@ -13,8 +13,14 @@ import pytest
 from lightgbm import LGBMClassifier
 
 from tests.harness import invoke_table_function
-from vgi_lightgbm.importance import FeatureImportance
-from vgi_lightgbm.registry import LocalDiskStore, ModelMetadata, set_store
+from vgi_lightgbm.importance import (
+    FeatureImportance,
+    _BoosterClassifier,
+    _BoosterRegressor,
+    _class_code,
+    _sklearn_adapter,
+)
+from vgi_lightgbm.registry import LocalDiskStore, ModelMetadata, booster_to_text, set_store
 
 
 @pytest.fixture()
@@ -77,3 +83,65 @@ class TestFeatureImportance:
     def test_unknown_model(self, registry) -> None:
         with pytest.raises(ValueError, match="not found"):
             invoke_table_function(FeatureImportance, positional=(pa.scalar("nope"),))
+
+
+def _booster(est) -> object:
+    import lightgbm as lgb
+
+    return lgb.Booster(model_str=booster_to_text(est))
+
+
+class TestSklearnAdapter:
+    """The adapter lets sklearn's permutation_importance / partial_dependence run
+    on a Booster reconstructed from text (no pickled wrapper)."""
+
+    def test_classifier_adapter_predicts_codes(self) -> None:
+        from lightgbm import LGBMClassifier
+
+        x = np.column_stack([np.r_[np.zeros(30), np.ones(30)], np.random.default_rng(0).normal(size=60)])
+        y = np.r_[np.zeros(30), np.ones(30)].astype(int)
+        est = LGBMClassifier(n_estimators=10, min_child_samples=1, verbosity=-1, random_state=0).fit(x, y)
+        meta = ModelMetadata(
+            name="m",
+            estimator="lgbm_classifier",
+            task="classification",
+            target="y",
+            feature_names=["a", "b"],
+            classes=[0, 1],
+            categorical=[False, False],
+        )
+        adapter = _sklearn_adapter(_booster(est), meta)
+        assert isinstance(adapter, _BoosterClassifier)
+        proba = adapter.predict_proba(x)
+        assert proba.shape == (60, 2)
+        assert np.allclose(proba.sum(axis=1), 1.0, atol=1e-9)
+        assert set(adapter.predict(x).tolist()) <= {0, 1}
+
+    def test_regressor_adapter(self) -> None:
+        from lightgbm import LGBMRegressor
+
+        x = np.random.default_rng(0).normal(size=(40, 2))
+        y = x[:, 0] * 2.0
+        est = LGBMRegressor(n_estimators=10, min_child_samples=1, verbosity=-1, random_state=0).fit(x, y)
+        meta = ModelMetadata(
+            name="m",
+            estimator="lgbm_regressor",
+            task="regression",
+            target="y",
+            feature_names=["a", "b"],
+            categorical=[False, False],
+        )
+        adapter = _sklearn_adapter(_booster(est), meta)
+        assert isinstance(adapter, _BoosterRegressor)
+        assert adapter.predict(x).shape == (40,)
+
+
+class TestClassCode:
+    def test_int_label_kept(self) -> None:
+        assert _class_code(2, 0) == 2
+
+    def test_string_label_uses_code(self) -> None:
+        assert _class_code("virginica", 2) == 2
+
+    def test_bool_label_uses_code(self) -> None:
+        assert _class_code(True, 1) == 1
