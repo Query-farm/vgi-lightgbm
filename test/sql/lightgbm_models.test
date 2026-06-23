@@ -1,0 +1,184 @@
+# name: test/sql/lightgbm_models.test
+# description: Supervised fit/predict + model registry end-to-end
+# group: [vgi_lightgbm]
+
+require-env VGI_LIGHTGBM_WORKER
+
+require vgi
+
+require httpfs
+
+statement ok
+ATTACH 'lightgbm' AS lightgbm (TYPE vgi, LOCATION '${VGI_LIGHTGBM_WORKER}');
+
+statement ok
+CREATE TEMP VIEW iris_xy AS
+  SELECT sample_id, sepal_length_cm, sepal_width_cm, petal_length_cm, petal_width_cm, target
+  FROM lightgbm.iris();
+
+statement ok
+CREATE TEMP VIEW iris_x AS
+  SELECT sample_id, sepal_length_cm, sepal_width_cm, petal_length_cm, petal_width_cm
+  FROM lightgbm.iris();
+
+# ---- fit a classifier; the summary row reports the training shape ----
+
+query III
+SELECT task, n_samples, n_features
+FROM lightgbm.fit((SELECT * FROM iris_xy), model_name => 'iris_clf',
+                  estimator => 'lgbm_classifier', target => 'target', id => 'sample_id');
+----
+classification	150	4
+
+# ---- it is now in the registry ----
+
+query II
+SELECT model_name, task FROM lightgbm.list_models() WHERE model_name = 'iris_clf';
+----
+iris_clf	classification
+
+query I
+SELECT n_classes FROM lightgbm.model_info('iris_clf');
+----
+3
+
+# ---- predict: in-sample accuracy is high and all 3 classes appear ----
+
+query I
+SELECT avg(CASE WHEN p.prediction = i.target THEN 1 ELSE 0 END) > 0.9
+FROM lightgbm.predict((SELECT * FROM iris_x), model_name => 'iris_clf', id => 'sample_id') p
+JOIN lightgbm.iris() i USING (sample_id);
+----
+true
+
+query I
+SELECT count(DISTINCT prediction)
+FROM lightgbm.predict((SELECT * FROM iris_x), model_name => 'iris_clf', id => 'sample_id');
+----
+3
+
+# ---- with_proba adds one probability column per class (id + prediction + 3) ----
+
+query I
+SELECT count(*) FROM (DESCRIBE
+  SELECT * FROM lightgbm.predict((SELECT * FROM iris_x), model_name => 'iris_clf', id => 'sample_id', with_proba => true));
+----
+5
+
+# probabilities sum to 1 for every row
+query I
+SELECT bool_and(abs(proba_0 + proba_1 + proba_2 - 1) < 1e-6)
+FROM lightgbm.predict((SELECT * FROM iris_x), model_name => 'iris_clf', id => 'sample_id', with_proba => true);
+----
+true
+
+# ---- fit also returns the model as a BLOB; predict accepts it inline (model :=) ----
+
+statement ok
+SET VARIABLE iris_blob = (
+  SELECT model FROM lightgbm.fit((SELECT * FROM iris_xy),
+                                 estimator => 'lgbm_classifier', target => 'target', id => 'sample_id'));
+
+query I
+SELECT count(*) FROM lightgbm.predict((SELECT * FROM iris_x), model => getvariable('iris_blob'), id => 'sample_id');
+----
+150
+
+# ---- cross_val_predict scores every row out-of-fold, no model stored ----
+
+query I
+SELECT count(*) FROM lightgbm.cross_val_predict((SELECT * FROM iris_xy),
+  estimator => 'lgbm_classifier', target => 'target', id => 'sample_id', cv => 5);
+----
+150
+
+# ---- cross_val_score returns one row per fold with a high accuracy ----
+
+query I
+SELECT count(*) = 5 AND avg(score) > 0.85
+FROM lightgbm.cross_val_score((SELECT * FROM iris_xy),
+  estimator => 'lgbm_classifier', target => 'target', cv => 5);
+----
+true
+
+# ---- a regression model fits and is tagged regression ----
+
+query I
+SELECT task FROM lightgbm.fit((SELECT * FROM lightgbm.diabetes()), model_name => 'diab_reg',
+                              estimator => 'lgbm_regressor', target => 'target', id => 'sample_id');
+----
+regression
+
+# ---- cross_val_predict works for regression too ----
+
+query I
+SELECT count(*) FROM lightgbm.cross_val_predict((SELECT * FROM lightgbm.diabetes()),
+  estimator => 'lgbm_regressor', target => 'target', id => 'sample_id', cv => 3);
+----
+442
+
+# ---- typed fit: native hyperparameters as SQL named args ----
+
+query III
+SELECT task, n_features, train_score > 0.9
+FROM lightgbm.fit_lgbm_classifier((SELECT * FROM iris_xy), model_name => 'iris_typed',
+  target => 'target', id => 'sample_id', n_estimators => 60, num_leaves => 15, learning_rate => 0.1);
+----
+classification	4	true
+
+# ---- native categorical (string) features ----
+
+statement ok
+CREATE TEMP TABLE catdata AS
+  SELECT i AS id, (i % 5)::DOUBLE AS x,
+         CASE WHEN i % 2 = 0 THEN 'red' ELSE 'blue' END AS color,
+         (CASE WHEN i % 2 = 0 THEN 1 ELSE 0 END) AS target
+  FROM range(200) t(i);
+
+# the string column is detected and counted as categorical
+query II
+SELECT n_categorical, n_features
+FROM lightgbm.fit((SELECT id, x, color, target FROM catdata), model_name => 'catm', target => 'target', id => 'id');
+----
+1	2
+
+query I
+SELECT n_categorical FROM lightgbm.list_models() WHERE model_name = 'catm';
+----
+1
+
+# predict replays the encoding; color drives the label so accuracy is high
+query I
+SELECT avg(CASE WHEN p.prediction = c.target THEN 1 ELSE 0 END) > 0.95
+FROM lightgbm.predict((SELECT id, x, color FROM catdata), model_name => 'catm', id => 'id') p
+JOIN catdata c USING (id);
+----
+true
+
+# ---- binary classifier: with_proba yields two probabilities that sum to one ----
+
+statement ok
+SELECT * FROM lightgbm.fit((SELECT * EXCLUDE (target_name) FROM lightgbm.breast_cancer()), model_name => 'bc_clf',
+                           estimator => 'lgbm_classifier', target => 'target', id => 'sample_id');
+
+query I
+SELECT bool_and(abs(proba_0 + proba_1 - 1) < 1e-6) AND count(DISTINCT prediction) = 2
+FROM lightgbm.predict((SELECT * EXCLUDE (target, target_name) FROM lightgbm.breast_cancer()),
+  model_name => 'bc_clf', id => 'sample_id', with_proba => true);
+----
+true
+
+# ---- drop_model removes it ----
+
+query II
+SELECT model_name, dropped FROM lightgbm.drop_model('iris_clf');
+----
+iris_clf	true
+
+query I
+SELECT count(*) FROM lightgbm.model_info('iris_clf');
+----
+0
+
+statement ok
+DETACH lightgbm;

@@ -1,0 +1,65 @@
+# name: test/sql/lightgbm_search.test
+# description: grid_search leaderboard + refit best-model BLOB
+# group: [vgi_lightgbm]
+
+require-env VGI_LIGHTGBM_WORKER
+
+require vgi
+
+require httpfs
+
+statement ok
+ATTACH 'lightgbm' AS lightgbm (TYPE vgi, LOCATION '${VGI_LIGHTGBM_WORKER}');
+
+statement ok
+CREATE TEMP VIEW iris_xy AS
+  SELECT sample_id, sepal_length_cm, sepal_width_cm, petal_length_cm, petal_width_cm, target
+  FROM lightgbm.iris();
+
+# ---- grid_search returns one row per combination (2 x 2 = 4) ----
+
+query II
+SELECT count(*), max(rank) FROM lightgbm.grid_search((SELECT * FROM iris_xy),
+  estimator => 'lgbm_classifier', target => 'target',
+  grid => '{"num_leaves": [15, 31], "learning_rate": [0.05, 0.1]}', cv => 4);
+----
+4	4
+
+# ---- exactly one row (the best) carries the refit model BLOB ----
+
+query I
+SELECT count(*) FROM lightgbm.grid_search((SELECT * FROM iris_xy),
+  estimator => 'lgbm_classifier', target => 'target',
+  grid => '{"num_leaves": [15, 31], "learning_rate": [0.05, 0.1]}', cv => 4)
+WHERE model IS NOT NULL;
+----
+1
+
+# ---- the row carrying the BLOB is the rank-1 row, with a strong score ----
+
+query I
+SELECT rank = 1 AND mean_score > 0.85 FROM lightgbm.grid_search((SELECT * FROM iris_xy),
+  estimator => 'lgbm_classifier', target => 'target',
+  grid => '{"num_leaves": [15, 31]}', cv => 4)
+WHERE model IS NOT NULL;
+----
+true
+
+# ---- the best model BLOB can be fed straight into predict (model :=) ----
+
+statement ok
+SET VARIABLE best = (
+  SELECT model FROM lightgbm.grid_search((SELECT * FROM iris_xy),
+    estimator => 'lgbm_classifier', target => 'target',
+    grid => '{"num_leaves": [15, 31]}', cv => 4)
+  WHERE model IS NOT NULL);
+
+query I
+SELECT count(DISTINCT prediction) FROM lightgbm.predict(
+  (SELECT sample_id, sepal_length_cm, sepal_width_cm, petal_length_cm, petal_width_cm FROM lightgbm.iris()),
+  model => getvariable('best'), id => 'sample_id');
+----
+3
+
+statement ok
+DETACH lightgbm;

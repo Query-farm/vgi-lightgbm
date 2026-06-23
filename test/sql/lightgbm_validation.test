@@ -1,0 +1,86 @@
+# name: test/sql/lightgbm_validation.test
+# description: Argument/column validation gives clear errors (not opaque ones)
+# group: [vgi_lightgbm]
+
+require-env VGI_LIGHTGBM_WORKER
+
+require vgi
+
+require httpfs
+
+statement ok
+ATTACH 'lightgbm' AS lightgbm (TYPE vgi, LOCATION '${VGI_LIGHTGBM_WORKER}');
+
+statement ok
+CREATE TEMP VIEW tr AS
+  SELECT sample_id, sepal_length_cm AS f1, sepal_width_cm AS f2,
+         petal_length_cm AS f3, petal_width_cm AS f4, target
+  FROM lightgbm.iris();
+
+# ---- missing required target -> clear error ----
+statement error
+SELECT * FROM lightgbm.fit((SELECT * FROM tr), model_name := 'm', estimator := 'lgbm_classifier');
+----
+requires 'target'
+
+# ---- unknown estimator -> lists valid ones ----
+statement error
+SELECT * FROM lightgbm.fit((SELECT * FROM tr), model_name := 'm', estimator := 'nope', target := 'target');
+----
+unknown estimator
+
+# ---- unknown hyperparameter -> lists valid params ----
+statement error
+SELECT * FROM lightgbm.fit((SELECT * FROM tr), model_name := 'm', target := 'target', params := '{"nonsense": 5}');
+----
+unknown hyperparameter
+
+# ---- model_name is optional (fit returns the BLOB without persisting) ----
+statement ok
+SELECT model IS NOT NULL FROM lightgbm.fit((SELECT * FROM tr), target := 'target', id := 'sample_id');
+
+statement ok
+SELECT * FROM lightgbm.fit((SELECT * FROM tr), model_name := 'valmodel',
+                           estimator := 'lgbm_classifier', target := 'target', id := 'sample_id');
+
+# ---- predict with a missing feature column -> clear error ----
+statement error
+SELECT * FROM lightgbm.predict((SELECT sample_id, f1, f2, f3 FROM tr), model_name := 'valmodel', id := 'sample_id');
+----
+requires feature column
+
+# predict realigns by name: reordered columns still score every row
+query I
+SELECT count(*) FROM lightgbm.predict((SELECT sample_id, f4, f3, f2, f1 FROM tr), model_name := 'valmodel', id := 'sample_id');
+----
+150
+
+# ---- predict on an unknown model -> clear error ----
+statement error
+SELECT * FROM lightgbm.predict((SELECT * FROM tr), model_name := 'ghost');
+----
+not found
+
+# ---- predict with neither model_name nor model -> clear error ----
+statement error
+SELECT * FROM lightgbm.predict((SELECT * FROM tr));
+----
+either 'model_name' or a 'model'
+
+# ---- grid_search needs a non-empty grid ----
+statement error
+SELECT * FROM lightgbm.grid_search((SELECT * FROM tr), target := 'target', grid := '');
+----
+non-empty
+
+# ---- feature_importance rejects a bad importance_type ----
+statement error
+SELECT * FROM lightgbm.feature_importance('valmodel', importance_type := 'bogus');
+----
+invalid importance_type
+
+statement ok
+SELECT * FROM lightgbm.drop_model('valmodel');
+
+statement ok
+DETACH lightgbm;

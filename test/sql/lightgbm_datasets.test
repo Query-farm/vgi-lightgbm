@@ -1,0 +1,54 @@
+# name: test/sql/lightgbm_datasets.test
+# description: Reference datasets and synthetic generators
+# group: [vgi_lightgbm]
+
+require-env VGI_LIGHTGBM_WORKER
+
+require vgi
+
+require httpfs
+
+statement ok
+ATTACH 'lightgbm' AS lightgbm (TYPE vgi, LOCATION '${VGI_LIGHTGBM_WORKER}');
+
+# ---- iris: 150 rows, 3 species ----
+
+query I
+SELECT count(*) FROM lightgbm.iris();
+----
+150
+
+query I
+SELECT count(DISTINCT target) FROM lightgbm.iris();
+----
+3
+
+# ---- column comments and names are exposed ----
+
+query I
+SELECT count(*) FROM (DESCRIBE SELECT * FROM lightgbm.iris());
+----
+7
+
+# ---- a regression dataset has a continuous target ----
+
+query I
+SELECT count(*) FROM lightgbm.diabetes();
+----
+442
+
+# ---- generators honour their arguments ----
+
+query II
+SELECT count(*), count(DISTINCT target)
+FROM lightgbm.make_classification(n_samples => 200, n_features => 6, n_classes => 4);
+----
+200	4
+
+query I
+SELECT count(*) FROM lightgbm.make_regression(n_samples => 120, n_features => 5, noise => 2.0);
+----
+120
+
+statement ok
+DETACH lightgbm;
