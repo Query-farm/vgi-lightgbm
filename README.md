@@ -1,5 +1,7 @@
 <p align="center">
   <img src="https://raw.githubusercontent.com/Query-farm/vgi-lightgbm/main/assets/vgi-logo.png" alt="Vector Gateway Interface" height="104">
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="https://raw.githubusercontent.com/Query-farm/vgi-lightgbm/main/assets/lightgbm-logo.png" alt="LightGBM" height="52">
 </p>
 
 # vgi-lightgbm
@@ -196,32 +198,3 @@ and a Docker build + `/health` smoke test on every push and PR. Dependabot
 (`.github/dependabot.yml`) keeps the Python deps, GitHub Actions, and the Docker
 base image up to date weekly.
 
-## Deployment (Fly.io)
-
-`vgi-python` / `vgi-rpc` are on PyPI, so the Docker image installs everything
-directly — no vendoring step (it adds `libgomp1`, LightGBM's OpenMP runtime).
-
-```sh
-make deploy        # build, smoke-test, push, and deploy
-fly volumes create lightgbm_models --size 1 --region iad   # one-time, for the registry
-```
-
-`serve.py` runs the worker over HTTP; attach the deployed endpoint with
-`ATTACH 'lightgbm' (TYPE vgi, LOCATION 'https://<app>.fly.dev');`.
-
-## Layout
-
-```
-lightgbm_worker.py     entry point; assembles the `lightgbm` catalog
-serve.py               HTTP entry point (Fly.io)
-vgi_lightgbm/
-  datasets.py          dataset table functions (bundled via scikit-learn)
-  models.py            fit / predict / cross_val_predict / cross_val_score / registry mgmt
-  typed_models.py      generated fit_lgbm_classifier / fit_lgbm_regressor (typed hyperparams)
-  search.py            grid_search (JSON parameter grid)
-  importance.py        feature_importance + SHAP explain
-  features.py          categorical detection + integer encoding
-  registry.py          ModelStore (local disk; S3/R2 seam) + native-text serialization + model BLOB
-  buffering.py         shared sink/combine/matrix helpers
-  schema_utils.py      Arrow schema helpers
-```
