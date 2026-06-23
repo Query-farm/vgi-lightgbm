@@ -48,7 +48,7 @@ Each piece is mapped to the VGI primitive that fits its data flow:
 **Conventions** for the fit / predict / explain functions:
 
 - The input relation **is** the feature matrix `X`, passed as a `(SELECT ...)`
-  subquery. Named arguments use DuckDB's `name := value` (or `=>`) syntax.
+  subquery. Named arguments use DuckDB's `name := value` syntax.
 - **`id`** names a passthrough column: it is *excluded from the features* and
   copied unchanged onto each output row, so you can join results back to the
   source. It is optional.
@@ -63,9 +63,11 @@ Each piece is mapped to the VGI primitive that fits its data flow:
   (detected automatically). NULLs are kept as missing values, which LightGBM
   handles natively. Other column types raise a clear error — `SELECT` only the
   columns you want as features.
-- Hyperparameters are passed as a JSON string: `params := '{"n_estimators": 300, "num_leaves": 63}'`.
+- For `fit`, hyperparameters are passed as a JSON string: `params := '{"n_estimators": 300, "num_leaves": 63}'`.
   Unknown hyperparameters are rejected with the list of valid ones. The typed
-  `fit_lgbm_*` functions expose the common ones as native named arguments instead.
+  `fit_lgbm_*` functions expose the common ones as native named arguments instead;
+  `grid_search`/`randomized_search` take a typed discriminated-union estimator
+  argument (see below), not JSON.
 - **`fit`/`predict` align features by name**, not position: `predict` selects the
   model's fitted feature columns by name (input order is irrelevant, extra columns
   are ignored) and errors if a required feature column is missing.
