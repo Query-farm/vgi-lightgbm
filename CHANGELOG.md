@@ -6,6 +6,29 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- `randomized_search`: cross-validated random hyperparameter search (`n_iter`,
+  `random_state`, capped at the grid size).
+- `permutation_importance`: model-agnostic ranked feature importance.
+- `partial_dependence`: average prediction vs. one numeric feature (multiclass ->
+  one curve per class).
+- `predict` output modes: `output_margin` (raw margin score) and `pred_leaf`
+  (per-tree leaf indices), mutually exclusive.
+
+### Changed
+- **Breaking:** `grid_search` now takes the estimator + grid as a typed
+  discriminated-union argument (`estimator := union_value(<estimator> := {param:
+  [values]})`) instead of the JSON `grid := '...'` string; only the listed
+  hyperparameters are searched.
+- Classification targets accept **any label dtype** (integer codes or strings):
+  labels are encoded internally and `predict` / `cross_val_predict` decode back to
+  the original labels (the `prediction` column is `VARCHAR` for string labels,
+  `BIGINT` otherwise; `with_proba` names columns `proba_<label>`).
+- `feature_importance` and `permutation_importance` are both ranked.
+- `model_info` integer columns are `BIGINT` and `task` is a plain string (matching
+  the `fit` summary schema).
+- Normalized SQL examples / docstrings to the `:=` named-argument syntax.
+
 ## [0.1.0] - 2026-06-23
 
 ### Added

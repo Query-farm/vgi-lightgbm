@@ -67,11 +67,19 @@ SELECT * FROM lightgbm.predict((SELECT * FROM tr));
 ----
 either 'model_name' or a 'model'
 
-# ---- grid_search needs a non-empty grid ----
+# ---- grid_search requires a target ----
 statement error
-SELECT * FROM lightgbm.grid_search((SELECT * FROM tr), target := 'target', grid := '');
+SELECT * FROM lightgbm.grid_search((SELECT * FROM tr),
+  estimator := union_value(lgbm_classifier := {'num_leaves': [15, 31]}));
 ----
-non-empty
+requires 'target'
+
+# ---- grid_search rejects a target column that is not in the input ----
+statement error
+SELECT * FROM lightgbm.grid_search((SELECT * FROM tr), target := 'nope',
+  estimator := union_value(lgbm_classifier := {'num_leaves': [15, 31]}));
+----
+not found in input
 
 # ---- feature_importance rejects a bad importance_type ----
 statement error
