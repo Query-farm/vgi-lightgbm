@@ -99,12 +99,7 @@ def validate_features(table: pa.Table, feature_names: list[str], *, what: str = 
     bad = []
     for n in feature_names:
         t = table.schema.field(n).type
-        if not (
-            pa.types.is_floating(t)
-            or pa.types.is_integer(t)
-            or pa.types.is_boolean(t)
-            or is_categorical(t)
-        ):
+        if not (pa.types.is_floating(t) or pa.types.is_integer(t) or pa.types.is_boolean(t) or is_categorical(t)):
             bad.append(f"{n} ({t})")
     if bad:
         raise ValueError(
