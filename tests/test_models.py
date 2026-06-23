@@ -7,10 +7,11 @@ test/sql/lightgbm_models.test; here we test the storage backend and helpers.
 from __future__ import annotations
 
 import numpy as np
+import pyarrow as pa
 import pytest
 from lightgbm import LGBMClassifier
 
-from vgi_lightgbm.models import _parse_params, build_estimator
+from vgi_lightgbm.models import _label_dtype, _parse_params, build_estimator, encode_labels
 from vgi_lightgbm.registry import (
     LocalDiskStore,
     ModelBlobError,
@@ -125,6 +126,32 @@ class TestEstimatorCatalog:
     def test_unknown_hyperparameter(self) -> None:
         with pytest.raises(ValueError, match="unknown hyperparameter"):
             build_estimator("lgbm_classifier", {"nonsense": 5})
+
+
+class TestEncodeLabels:
+    def test_int_labels_roundtrip(self) -> None:
+        codes, classes = encode_labels([2, 0, 1, 2, 0])
+        assert classes == [0, 1, 2]
+        assert list(codes) == [2, 0, 1, 2, 0]
+        # decode is classes[code]
+        assert [classes[c] for c in codes] == [2, 0, 1, 2, 0]
+
+    def test_string_labels_sorted_and_decode(self) -> None:
+        codes, classes = encode_labels(["b", "a", "c", "a"])
+        assert classes == ["a", "b", "c"]
+        assert [classes[c] for c in codes] == ["b", "a", "c", "a"]
+
+    def test_string_labels_give_varchar_prediction(self) -> None:
+        _codes, classes = encode_labels(["setosa", "versicolor"])
+        assert _label_dtype(classes) == pa.string()
+
+    def test_int_labels_give_bigint_prediction(self) -> None:
+        _codes, classes = encode_labels([0, 1, 2])
+        assert _label_dtype(classes) == pa.int64()
+
+    def test_no_labels_rejected(self) -> None:
+        with pytest.raises(ValueError, match="no non-null labels"):
+            encode_labels([None, None])
 
 
 class TestParseParams:

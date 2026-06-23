@@ -11,8 +11,8 @@
 
 Both accept either a registry ``model_name`` or an inline ``model`` BLOB.
 
-    SELECT * FROM lightgbm.feature_importance('iris_clf', importance_type => 'gain');
-    SELECT * FROM lightgbm.explain((SELECT * FROM new_data), model_name => 'house_reg', id => 'id');
+    SELECT * FROM lightgbm.feature_importance('iris_clf', importance_type := 'gain');
+    SELECT * FROM lightgbm.explain((SELECT * FROM new_data), model_name := 'house_reg', id := 'id');
 """
 
 from __future__ import annotations
@@ -102,7 +102,7 @@ class FeatureImportance(TableFunctionGenerator[FeatureImportanceArgs]):
         categories = ["models", "interpretation"]
         examples = [
             FunctionExample(
-                sql="SELECT * FROM lightgbm.feature_importance('iris_clf', importance_type => 'gain')",
+                sql="SELECT * FROM lightgbm.feature_importance('iris_clf', importance_type := 'gain')",
                 description="Gain-based feature importance for a stored model",
             )
         ]
@@ -168,7 +168,7 @@ class ExplainModel(TableInOutGenerator[ExplainArgs]):
             FunctionExample(
                 sql=(
                     "SELECT * FROM lightgbm.explain((SELECT * FROM lightgbm.diabetes()), "
-                    "model_name => 'diab_reg', id => 'sample_id')"
+                    "model_name := 'diab_reg', id := 'sample_id')"
                 ),
                 description="Explain each row's prediction with per-feature contributions",
             )

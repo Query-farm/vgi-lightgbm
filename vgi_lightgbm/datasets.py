@@ -10,7 +10,7 @@ data purely to keep demos and the SQL tests self-contained:
   ``on_bind``.
 
     SELECT * FROM lightgbm.iris();
-    SELECT * FROM lightgbm.make_classification(n_samples => 500, n_features => 8);
+    SELECT * FROM lightgbm.make_classification(n_samples := 500, n_features := 8);
 """
 
 from __future__ import annotations
@@ -50,8 +50,7 @@ def _feature_labels(bunch: Any, n_features: int) -> list[str]:
 def _feature_fields(labels: list[str]) -> list[pa.Field]:
     cols = dedupe_names([snake_case(label) for label in labels])
     return [
-        field(col, pa.float64(), f"Feature: {label}.", nullable=False)
-        for col, label in zip(cols, labels, strict=True)
+        field(col, pa.float64(), f"Feature: {label}.", nullable=False) for col, label in zip(cols, labels, strict=True)
     ]
 
 
@@ -293,7 +292,7 @@ class MakeClassificationFunction(TableFunctionGenerator[MakeClassificationArgs])
         projection_pushdown = True
         examples = [
             FunctionExample(
-                sql="SELECT * FROM lightgbm.make_classification(n_samples => 500, n_features => 5, n_classes => 3)",
+                sql="SELECT * FROM lightgbm.make_classification(n_samples := 500, n_features := 5, n_classes := 3)",
                 description="500 rows, 5 features, 3 classes",
             )
         ]
@@ -351,7 +350,7 @@ class MakeRegressionFunction(TableFunctionGenerator[MakeRegressionArgs]):
         projection_pushdown = True
         examples = [
             FunctionExample(
-                sql="SELECT * FROM lightgbm.make_regression(n_samples => 500, n_features => 4, noise => 5.0)",
+                sql="SELECT * FROM lightgbm.make_regression(n_samples := 500, n_features := 4, noise := 5.0)",
                 description="500 rows, 4 features, noisy target",
             )
         ]

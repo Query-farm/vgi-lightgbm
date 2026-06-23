@@ -17,9 +17,9 @@ strength). NULLs are preserved as missing values, which LightGBM handles
 natively. Hyperparameters are passed as a JSON string (the typed
 ``fit_lgbm_*`` functions expose the common ones as named args).
 
-    SELECT * FROM lightgbm.fit((SELECT * FROM training), model_name => 'iris_clf',
-                               estimator => 'lgbm_classifier', target => 'species', id => 'id');
-    SELECT * FROM lightgbm.predict((SELECT * FROM new_data), model_name => 'iris_clf', id => 'id');
+    SELECT * FROM lightgbm.fit((SELECT * FROM training), model_name := 'iris_clf',
+                               estimator := 'lgbm_classifier', target := 'species', id := 'id');
+    SELECT * FROM lightgbm.predict((SELECT * FROM new_data), model_name := 'iris_clf', id := 'id');
 """
 
 from __future__ import annotations
@@ -91,7 +91,7 @@ def _parse_params(params: str) -> dict[str, Any]:
         return {}
     parsed = json.loads(params)
     if not isinstance(parsed, dict):
-        raise ValueError('params must be a JSON object, e.g. \'{"n_estimators": 200}\'')
+        raise ValueError("params must be a JSON object, e.g. '{\"n_estimators\": 200}'")
     return parsed
 
 
@@ -126,17 +126,62 @@ def _features_excluding(input_schema: pa.Schema, *exclude: str) -> list[str]:
     return [n for n in input_schema.names if n not in drop]
 
 
-def _prediction_field(task: str) -> pa.Field:
+def _label_dtype(classes: list[Any] | None) -> pa.DataType:
+    """Arrow type for a decoded prediction column, from the original class labels."""
+    if classes and any(isinstance(c, str) for c in classes):
+        return pa.string()
+    return pa.int64()
+
+
+def _prediction_field(task: str, classes: list[Any] | None = None) -> pa.Field:
     if task == CLASSIFICATION:
-        return sfield("prediction", pa.int64(), "Predicted class label.", nullable=False)
+        return sfield("prediction", _label_dtype(classes), "Predicted class label.", nullable=False)
     return sfield("prediction", pa.float64(), "Predicted value.", nullable=False)
 
 
+def _proba_label(c: Any) -> str:
+    """Column-name-safe rendering of a class label for proba_<label> columns."""
+    return str(c)
+
+
+def encode_labels(values: list[Any]) -> tuple[np.ndarray, list[Any]]:
+    """Label-encode raw target values to 0..n-1 integer codes.
+
+    Returns ``(codes, classes)`` where ``classes`` is the ordered list of the
+    *original* labels (so ``classes[code]`` decodes a prediction). Labels are
+    ordered as scikit-learn's ``LabelEncoder`` does: sorted distinct values. Any
+    hashable/orderable label type works (int, float, string, bool).
+    """
+    seen = [v for v in values if v is not None]
+    if not seen:
+        raise ValueError("classification target has no non-null labels")
+    try:
+        classes = sorted(set(seen), key=lambda v: (str(type(v)), v))
+    except TypeError as exc:  # pragma: no cover - mixed unorderable labels
+        raise ValueError(f"classification target labels are not orderable: {exc}") from exc
+    index = {c: i for i, c in enumerate(classes)}
+    codes = np.array([index[v] for v in values], dtype=int)
+    return codes, classes
+
+
 def _target_array(table: pa.Table, target: str, task: str) -> np.ndarray:
-    y = np.asarray(table.column(target).to_numpy(zero_copy_only=False))
+    """Numeric target for regression; for classification use ``_target_codes``."""
+    col = table.column(target)
     if task == CLASSIFICATION:
-        return np.rint(y.astype(float)).astype(int)
-    return y.astype(float)
+        codes, _classes = _target_codes(table, target)
+        return codes
+    try:
+        return np.asarray(col.to_numpy(zero_copy_only=False)).astype(float)
+    except (ValueError, TypeError) as exc:
+        raise ValueError(
+            f"regression target {target!r} must be numeric; could not convert its values to numbers ({exc})"
+        ) from exc
+
+
+def _target_codes(table: pa.Table, target: str) -> tuple[np.ndarray, list[Any]]:
+    """Label-encode a classification target column to codes + ordered original labels."""
+    values = table.column(target).to_pylist()
+    return encode_labels(values)
 
 
 # ===========================================================================
@@ -184,14 +229,18 @@ def _fit_and_emit(
     cat_idx = categorical_indices(cat_mask)
 
     x = encode_matrix(table, feats, cat_mask, categories)
-    y = _target_array(table, target, task)
+    if task == CLASSIFICATION:
+        y, classes = _target_codes(table, target)
+    else:
+        y = _target_array(table, target, task)
+        classes = None
 
     fit_kwargs: dict[str, Any] = {}
     if cat_idx:
         fit_kwargs["categorical_feature"] = cat_idx
     estimator.fit(x, y, **fit_kwargs)
     train_score = float(estimator.score(x, y))
-    classes = [int(c) for c in estimator.classes_] if task == CLASSIFICATION else None
+    # estimator.classes_ are the 0..n-1 codes; the original labels live in `classes`.
 
     meta = ModelMetadata(
         name=model_name or "",
@@ -263,8 +312,8 @@ class FitModel(SinkBuffer[FitArgs, DrainState]):
                 sql=(
                     "SELECT model_name, task, n_samples FROM lightgbm.fit("
                     "(SELECT sample_id, sepal_length_cm, sepal_width_cm, petal_length_cm, petal_width_cm, target "
-                    "FROM lightgbm.iris()), model_name => 'iris_clf', "
-                    "estimator => 'lgbm_classifier', target => 'target', id => 'sample_id')"
+                    "FROM lightgbm.iris()), model_name := 'iris_clf', "
+                    "estimator := 'lgbm_classifier', target := 'target', id := 'sample_id')"
                 ),
                 description="Train a LightGBM classifier on iris and store it as 'iris_clf'",
             )
@@ -282,9 +331,7 @@ class FitModel(SinkBuffer[FitArgs, DrainState]):
         input_schema = params.bind_call.input_schema
         assert input_schema is not None
         if a.target not in input_schema.names:
-            raise ValueError(
-                f"target column {a.target!r} not found in input; columns: {', '.join(input_schema.names)}"
-            )
+            raise ValueError(f"target column {a.target!r} not found in input; columns: {', '.join(input_schema.names)}")
         return BindResponse(output_schema=_FIT_SCHEMA)
 
     @classmethod
@@ -337,6 +384,14 @@ class PredictArgs:
     with_proba: Annotated[
         bool, Arg("with_proba", default=False, doc="Also emit per-class probabilities (classifiers).")
     ]
+    output_margin: Annotated[
+        bool,
+        Arg("output_margin", default=False, doc="Emit the raw (untransformed) margin score instead of the label."),
+    ]
+    pred_leaf: Annotated[
+        bool,
+        Arg("pred_leaf", default=False, doc="Emit the leaf index each tree assigns the row (a list per row)."),
+    ]
 
 
 # Loaded models cached per query execution to avoid reloading each batch.
@@ -384,7 +439,7 @@ class PredictModel(TableInOutGenerator[PredictArgs]):
             FunctionExample(
                 sql=(
                     "SELECT * FROM lightgbm.predict((SELECT * FROM lightgbm.iris()), "
-                    "model_name => 'iris_clf', id => 'sample_id')"
+                    "model_name := 'iris_clf', id := 'sample_id')"
                 ),
                 description="Predict with the stored 'iris_clf' model",
             )
@@ -408,13 +463,25 @@ class PredictModel(TableInOutGenerator[PredictArgs]):
                 f"input columns: {', '.join(input_schema.names)}"
             )
 
+        if a.with_proba and (a.output_margin or a.pred_leaf):
+            raise ValueError("with_proba cannot be combined with output_margin or pred_leaf")
+        if a.output_margin and a.pred_leaf:
+            raise ValueError("output_margin and pred_leaf are mutually exclusive")
+
         fields: list[pa.Field] = []
         if a.id:
             fields.append(input_schema.field(a.id))
-        fields.append(_prediction_field(meta.task))
+        if a.pred_leaf:
+            fields.append(
+                sfield("leaf", pa.list_(pa.int32()), "Leaf index this row reaches in each tree.", nullable=False)
+            )
+        elif a.output_margin:
+            fields.append(sfield("margin", pa.float64(), "Raw (untransformed) margin score.", nullable=False))
+        else:
+            fields.append(_prediction_field(meta.task, meta.classes))
         if a.with_proba and meta.task == CLASSIFICATION:
             for c in meta.classes or []:
-                fields.append(sfield(f"proba_{c}", pa.float64(), f"P(class = {c}).", nullable=False))
+                fields.append(sfield(f"proba_{_proba_label(c)}", pa.float64(), f"P(class = {c}).", nullable=False))
         return BindResponse(output_schema=pa.schema(fields))
 
     @classmethod
@@ -456,14 +523,23 @@ class PredictModel(TableInOutGenerator[PredictArgs]):
         if a.id:
             columns[a.id] = batch.column(a.id).to_pylist()
 
-        if meta.task == CLASSIFICATION:
+        if a.pred_leaf:
+            leaves = np.atleast_2d(np.asarray(booster.predict(x, pred_leaf=True)))
+            columns["leaf"] = [[int(v) for v in row] for row in leaves]
+        elif a.output_margin:
+            # raw_score=True gives the untransformed margin; multiclass is 2D -> take the max.
+            margin = np.asarray(booster.predict(x, raw_score=True))
+            if margin.ndim > 1:
+                margin = margin.max(axis=1)
+            columns["margin"] = [float(v) for v in margin.reshape(-1)]
+        elif meta.task == CLASSIFICATION:
             classes = meta.classes or []
             proba = _proba(booster, x, len(classes))
             idx = np.argmax(proba, axis=1)
-            columns["prediction"] = [int(classes[i]) for i in idx]
+            columns["prediction"] = [classes[i] for i in idx]
             if a.with_proba:
                 for j, c in enumerate(classes):
-                    columns[f"proba_{c}"] = [float(v) for v in proba[:, j]]
+                    columns[f"proba_{_proba_label(c)}"] = [float(v) for v in proba[:, j]]
         else:
             preds = np.asarray(booster.predict(x)).reshape(-1)
             columns["prediction"] = [float(v) for v in preds]
@@ -511,7 +587,7 @@ class CrossValPredict(SinkBuffer[CrossValArgs, DrainState]):
                 sql=(
                     "SELECT * FROM lightgbm.cross_val_predict("
                     "(SELECT sample_id, sepal_length_cm, sepal_width_cm, petal_length_cm, petal_width_cm, target "
-                    "FROM lightgbm.iris()), estimator => 'lgbm_classifier', target => 'target', id => 'sample_id')"
+                    "FROM lightgbm.iris()), estimator := 'lgbm_classifier', target := 'target', id := 'sample_id')"
                 ),
                 description="5-fold out-of-fold predictions on iris",
             )
@@ -526,13 +602,16 @@ class CrossValPredict(SinkBuffer[CrossValArgs, DrainState]):
         input_schema = params.bind_call.input_schema
         assert input_schema is not None
         if a.target not in input_schema.names:
-            raise ValueError(
-                f"target column {a.target!r} not found in input; columns: {', '.join(input_schema.names)}"
-            )
+            raise ValueError(f"target column {a.target!r} not found in input; columns: {', '.join(input_schema.names)}")
         fields: list[pa.Field] = []
         if a.id:
             fields.append(input_schema.field(a.id))
-        fields.append(_prediction_field(task))
+        # The prediction column type depends on the target's label dtype; resolve
+        # it from the input schema (string target -> VARCHAR, else BIGINT).
+        classes: list[Any] | None = None
+        if task == CLASSIFICATION and pa.types.is_string(input_schema.field(a.target).type):
+            classes = [""]  # marker: string labels -> VARCHAR prediction column
+        fields.append(_prediction_field(task, classes))
         return BindResponse(output_schema=pa.schema(fields))
 
     @classmethod
@@ -569,8 +648,13 @@ class CrossValPredict(SinkBuffer[CrossValArgs, DrainState]):
         categories = fit_categories(table, feats, cat_mask)
         cat_idx = categorical_indices(cat_mask)
         x = encode_matrix(table, feats, cat_mask, categories)
-        y = _target_array(table, a.target, task)
         hp = _parse_params(a.params)
+
+        classes: list[Any] | None = None
+        if task == CLASSIFICATION:
+            y, classes = _target_codes(table, a.target)
+        else:
+            y = _target_array(table, a.target, task)
 
         preds = np.empty(len(y), dtype=float)
         for train_idx, test_idx in _cv_splitter(task, a.cv, y):
@@ -580,9 +664,12 @@ class CrossValPredict(SinkBuffer[CrossValArgs, DrainState]):
         columns: dict[str, list[Any]] = {}
         if a.id:
             columns[a.id] = table.column(a.id).to_pylist()
-        columns["prediction"] = (
-            [int(round(v)) for v in preds] if task == CLASSIFICATION else [float(v) for v in preds]
-        )
+        if task == CLASSIFICATION:
+            assert classes is not None
+            # estimator.predict returns the 0..n-1 code; decode to the original label.
+            columns["prediction"] = [classes[int(round(v))] for v in preds]
+        else:
+            columns["prediction"] = [float(v) for v in preds]
         out.emit(pa.RecordBatch.from_pydict(columns, schema=params.output_schema))
 
 
@@ -622,7 +709,7 @@ class CrossValScore(SinkBuffer[CrossValScoreArgs, DrainState]):
                 sql=(
                     "SELECT fold, score FROM lightgbm.cross_val_score("
                     "(SELECT sample_id, sepal_length_cm, sepal_width_cm, petal_length_cm, petal_width_cm, target "
-                    "FROM lightgbm.iris()), estimator => 'lgbm_classifier', target => 'target', cv => 5)"
+                    "FROM lightgbm.iris()), estimator := 'lgbm_classifier', target := 'target', cv := 5)"
                 ),
                 description="5-fold accuracy scores on iris",
             )
@@ -637,9 +724,7 @@ class CrossValScore(SinkBuffer[CrossValScoreArgs, DrainState]):
         input_schema = params.bind_call.input_schema
         assert input_schema is not None
         if a.target not in input_schema.names:
-            raise ValueError(
-                f"target column {a.target!r} not found in input; columns: {', '.join(input_schema.names)}"
-            )
+            raise ValueError(f"target column {a.target!r} not found in input; columns: {', '.join(input_schema.names)}")
         return BindResponse(output_schema=_CV_SCORE_SCHEMA)
 
     @classmethod
@@ -702,12 +787,12 @@ _MODEL_INFO_SCHEMA = pa.schema(
     [
         sfield("model_name", pa.string(), "Stored model name.", nullable=False),
         sfield("estimator", pa.string(), "Estimator type.", nullable=False),
-        sfield("task", pa.dictionary(pa.int8(), pa.string()), "classification or regression.", nullable=False),
+        sfield("task", pa.string(), "classification or regression.", nullable=False),
         sfield("target", pa.string(), "Target column the model was trained on.", nullable=False),
-        sfield("n_features", pa.int32(), "Number of features.", nullable=False),
-        sfield("n_categorical", pa.int32(), "Number of categorical features.", nullable=False),
-        sfield("n_samples", pa.int32(), "Number of training rows.", nullable=False),
-        sfield("n_classes", pa.int32(), "Number of classes (NULL for regression)."),
+        sfield("n_features", pa.int64(), "Number of features.", nullable=False),
+        sfield("n_categorical", pa.int64(), "Number of categorical features.", nullable=False),
+        sfield("n_samples", pa.int64(), "Number of training rows.", nullable=False),
+        sfield("n_classes", pa.int64(), "Number of classes (NULL for regression)."),
         sfield("train_score", pa.float64(), "In-sample training score."),
         sfield("lightgbm_version", pa.string(), "lightgbm version used to fit."),
         sfield("created_at", pa.string(), "UTC timestamp the model was stored."),

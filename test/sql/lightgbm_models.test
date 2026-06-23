@@ -168,6 +168,70 @@ FROM lightgbm.predict((SELECT * EXCLUDE (target, target_name) FROM lightgbm.brea
 ----
 true
 
+# ---- string class labels: fit on target_name, predictions decode to strings ----
+
+statement ok
+SELECT * FROM lightgbm.fit(
+  (SELECT sample_id, sepal_length_cm, sepal_width_cm, petal_length_cm, petal_width_cm, target_name FROM lightgbm.iris()),
+  model_name => 'iris_str', estimator => 'lgbm_classifier', target => 'target_name', id => 'sample_id');
+
+# predictions are the original string labels, with high in-sample accuracy
+query I
+SELECT avg(CASE WHEN p.prediction = i.target_name THEN 1 ELSE 0 END) > 0.9
+FROM lightgbm.predict((SELECT * FROM iris_x), model_name => 'iris_str', id => 'sample_id') p
+JOIN lightgbm.iris() i USING (sample_id);
+----
+true
+
+# the prediction column is VARCHAR and all three species appear
+query I
+SELECT count(DISTINCT prediction) FROM lightgbm.predict(
+  (SELECT * FROM iris_x), model_name => 'iris_str', id => 'sample_id')
+WHERE prediction IN ('setosa', 'versicolor', 'virginica');
+----
+3
+
+# with_proba names the columns proba_<original label>
+query I
+SELECT bool_and(abs(proba_setosa + proba_versicolor + proba_virginica - 1) < 1e-6)
+FROM lightgbm.predict((SELECT * FROM iris_x), model_name => 'iris_str', id => 'sample_id', with_proba => true);
+----
+true
+
+# ---- output_margin emits a scalar raw-margin column ----
+
+query I
+SELECT count(*) = 150 AND count(margin) = 150 FROM lightgbm.predict(
+  (SELECT * FROM iris_x), model_name => 'iris_str', id => 'sample_id', output_margin => true);
+----
+true
+
+# ---- pred_leaf emits one leaf index per tree (a list per row) ----
+
+query I
+SELECT bool_and(len(leaf) > 0) FROM lightgbm.predict(
+  (SELECT * FROM iris_x), model_name => 'iris_str', id => 'sample_id', pred_leaf => true);
+----
+true
+
+# output_margin and pred_leaf are mutually exclusive
+statement error
+SELECT * FROM lightgbm.predict((SELECT * FROM iris_x), model_name => 'iris_str',
+  output_margin => true, pred_leaf => true);
+----
+
+statement ok
+SELECT * FROM lightgbm.drop_model('iris_str');
+
+# ---- model_info reports BIGINT counts and a plain string task ----
+
+query I
+SELECT typeof(n_features) = 'BIGINT' AND typeof(n_samples) = 'BIGINT'
+   AND typeof(n_classes) = 'BIGINT' AND typeof(task) = 'VARCHAR'
+FROM lightgbm.model_info('iris_typed');
+----
+true
+
 # ---- drop_model removes it ----
 
 query II
