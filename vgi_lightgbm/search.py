@@ -58,6 +58,7 @@ from .models import (
     build_estimator,
 )
 from .registry import ModelMetadata, now_iso, pack_model, validate_name
+from .schema_utils import columns_md
 from .schema_utils import field as sfield
 from .typed_models import _HPARAMS, _UNSET
 
@@ -277,6 +278,7 @@ class GridSearch(SinkBuffer[GridSearchArgs, DrainState]):
         name = "grid_search"
         description = "Cross-validated grid search; returns the leaderboard + refit best model BLOB on the best row"
         categories = ["models", "supervised", "search"]
+        tags = {"vgi.columns_md": columns_md(_SEARCH_SCHEMA)}
         examples = [
             FunctionExample(
                 sql=(
@@ -338,6 +340,7 @@ class RandomizedSearch(SinkBuffer[RandomizedSearchArgs, DrainState]):
         name = "randomized_search"
         description = "Cross-validated randomized search: sample n_iter hyperparameter combinations"
         categories = ["models", "supervised", "search"]
+        tags = {"vgi.columns_md": columns_md(_SEARCH_SCHEMA)}
         examples = [
             FunctionExample(
                 sql=(

@@ -56,6 +56,7 @@ from .registry import (
     unpack_meta,
     unpack_model,
 )
+from .schema_utils import columns_md, columns_md_rows
 from .schema_utils import field as sfield
 
 _IMPORTANCE_TYPES = {"split", "gain"}
@@ -166,6 +167,7 @@ class FeatureImportance(TableFunctionGenerator[FeatureImportanceArgs]):
         name = "feature_importance"
         description = "Per-feature importance (split or gain) for a model, ranked"
         categories = ["models", "interpretation"]
+        tags = {"vgi.columns_md": columns_md(_IMPORTANCE_SCHEMA)}
         examples = [
             FunctionExample(
                 sql="SELECT * FROM lightgbm.feature_importance('iris_clf', importance_type := 'gain')",
@@ -230,6 +232,20 @@ class ExplainModel(TableInOutGenerator[ExplainArgs]):
         name = "explain"
         description = "Per-row SHAP feature contributions, long format (row, [class], feature, shap_value, base_value)"
         categories = ["models", "interpretation", "inference"]
+        tags = {
+            "vgi.columns_md": columns_md_rows(
+                [
+                    ("feature", "VARCHAR", "Feature column name."),
+                    ("shap_value", "DOUBLE", "Contribution of the feature to the raw margin."),
+                    ("base_value", "DOUBLE", "Model base (expected) raw-margin value."),
+                ],
+                note=(
+                    "Long format: one row per (input row, feature). If an `id` column is named, it is carried "
+                    "through as the first column. For multiclass models a `class` BIGINT column is added "
+                    "(one row per (input row, class, feature))."
+                ),
+            )
+        }
         examples = [
             FunctionExample(
                 sql=(
@@ -366,6 +382,7 @@ class PermutationImportance(SinkBuffer[PermImportanceArgs, DrainState]):
         name = "permutation_importance"
         description = "Model-agnostic feature importance: the drop in score when each feature is shuffled, ranked"
         categories = ["models", "interpretation", "evaluation"]
+        tags = {"vgi.columns_md": columns_md(_PERM_SCHEMA)}
         examples = [
             FunctionExample(
                 sql=(
@@ -488,6 +505,7 @@ class PartialDependence(SinkBuffer[PartialDependenceArgs, DrainState]):
         name = "partial_dependence"
         description = "How a stored model's average prediction changes as one feature varies over a grid"
         categories = ["models", "interpretation"]
+        tags = {"vgi.columns_md": columns_md(_PD_SCHEMA)}
         examples = [
             FunctionExample(
                 sql=(

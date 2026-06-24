@@ -35,8 +35,12 @@ from vgi.table_function import BindParams
 from .buffering import DrainState, SinkBuffer, input_schema_of
 from .models import _ESTIMATORS, _FIT_SCHEMA, _fit_and_emit
 from .registry import validate_name
+from .schema_utils import columns_md
 
 _UNSET: Any = object()
+
+# All typed fit_lgbm_<task> functions share the generic fit result schema.
+_FIT_COLUMNS_MD = columns_md(_FIT_SCHEMA)
 
 
 class _HP:
@@ -183,6 +187,7 @@ def _make_fit_function(est_name: str) -> type:
             "name": fn_name,
             "description": f"Fit a {est_name} with typed LightGBM hyperparameters; returns/stores the model",
             "categories": ["models", "supervised", "typed"],
+            "tags": {"vgi.columns_md": _FIT_COLUMNS_MD},
             "examples": [
                 FunctionExample(
                     sql=(

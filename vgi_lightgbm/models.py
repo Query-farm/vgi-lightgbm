@@ -70,6 +70,7 @@ from .registry import (
     unpack_model,
     validate_name,
 )
+from .schema_utils import columns_md, columns_md_rows
 from .schema_utils import field as sfield
 
 CLASSIFICATION = "classification"
@@ -307,6 +308,7 @@ class FitModel(SinkBuffer[FitArgs, DrainState]):
         name = "fit"
         description = "Fit a LightGBM estimator; returns the model as a BLOB and stores it when model_name is given"
         categories = ["models", "supervised"]
+        tags = {"vgi.columns_md": columns_md(_FIT_SCHEMA)}
         examples = [
             FunctionExample(
                 sql=(
@@ -435,6 +437,24 @@ class PredictModel(TableInOutGenerator[PredictArgs]):
         name = "predict"
         description = "Score a table through a stored model (model_name) or an inline model BLOB"
         categories = ["models", "supervised", "inference"]
+        tags = {
+            "vgi.columns_md": columns_md_rows(
+                [
+                    (
+                        "prediction",
+                        "BIGINT, VARCHAR, or DOUBLE",
+                        "Predicted class label (classification) or value (regression).",
+                    ),
+                ],
+                note=(
+                    "If an `id` column is named, it is carried through as the first column. The middle column "
+                    "varies with the prediction mode: default is `prediction` (typed from the label dtype -- "
+                    "BIGINT or VARCHAR for classification, DOUBLE for regression); `output_margin := true` emits a "
+                    "`margin` DOUBLE; `pred_leaf := true` emits a `leaf` INTEGER[] (one leaf index per tree). "
+                    "With `with_proba := true` on a classifier, one `proba_<label>` DOUBLE column is added per class."
+                ),
+            )
+        }
         examples = [
             FunctionExample(
                 sql=(
@@ -582,6 +602,18 @@ class CrossValPredict(SinkBuffer[CrossValArgs, DrainState]):
         name = "cross_val_predict"
         description = "Out-of-fold cross-validated predictions (no model is stored)"
         categories = ["models", "supervised", "evaluation"]
+        tags = {
+            "vgi.columns_md": columns_md_rows(
+                [
+                    (
+                        "prediction",
+                        "BIGINT, VARCHAR, or DOUBLE",
+                        "Out-of-fold predicted class label (classification) or value (regression).",
+                    ),
+                ],
+                note="If an `id` column is named, it is carried through as the first column.",
+            )
+        }
         examples = [
             FunctionExample(
                 sql=(
@@ -704,6 +736,7 @@ class CrossValScore(SinkBuffer[CrossValScoreArgs, DrainState]):
         name = "cross_val_score"
         description = "Per-fold cross-validation scores (accuracy or R^2); no model is stored"
         categories = ["models", "supervised", "evaluation"]
+        tags = {"vgi.columns_md": columns_md(_CV_SCORE_SCHEMA)}
         examples = [
             FunctionExample(
                 sql=(
@@ -832,6 +865,7 @@ class ListModels(TableFunctionGenerator[NoArgs]):
         name = "list_models"
         description = "List all models in the registry"
         categories = ["models", "registry"]
+        tags = {"vgi.columns_md": columns_md(_MODEL_INFO_SCHEMA)}
         examples = [FunctionExample(sql="SELECT * FROM lightgbm.list_models()", description="List stored models")]
 
     @classmethod
@@ -858,6 +892,7 @@ class ModelInfo(TableFunctionGenerator[ModelInfoArgs]):
         name = "model_info"
         description = "Describe a single stored model (one row, empty if absent)"
         categories = ["models", "registry"]
+        tags = {"vgi.columns_md": columns_md(_MODEL_INFO_SCHEMA)}
         examples = [
             FunctionExample(
                 sql="SELECT * FROM lightgbm.model_info('iris_clf')", description="Show one model's metadata"
@@ -900,6 +935,7 @@ class DropModel(TableFunctionGenerator[DropModelArgs]):
         name = "drop_model"
         description = "Delete a model from the registry"
         categories = ["models", "registry"]
+        tags = {"vgi.columns_md": columns_md(_DROP_SCHEMA)}
         examples = [
             FunctionExample(sql="SELECT * FROM lightgbm.drop_model('iris_clf')", description="Delete a stored model")
         ]
