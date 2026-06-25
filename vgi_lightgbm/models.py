@@ -291,7 +291,7 @@ def _fit_and_emit(
 # "" and we can raise a friendly error or treat it as unset.
 @dataclass(slots=True, frozen=True)
 class FitArgs:
-    data: Annotated[TableInput, Arg(0, doc="Training table (features + target [+ id]).")]
+    data: Annotated[TableInput, Arg(0, doc="Training rows: features + target [+ id].")]
     model_name: Annotated[
         str, Arg("model_name", default="", doc="Optional registry name; the model is always returned as a BLOB.")
     ]
@@ -403,9 +403,9 @@ class FitModel(SinkBuffer[FitArgs, DrainState]):
 
 @dataclass(slots=True, frozen=True)
 class PredictArgs:
-    data: Annotated[TableInput, Arg(0, doc="Table to score (must contain the model's feature columns).")]
+    data: Annotated[TableInput, Arg(0, doc="Rows to score (must contain the model's feature columns).")]
     model_name: Annotated[str, Arg("model_name", default="", doc="Name of a stored model (or pass model:=).")]
-    model: Annotated[bytes, Arg("model", default=b"", doc="A model BLOB from fit() (alternative to model_name).")]
+    model: Annotated[bytes, Arg("model", default=b"", doc="A fitted model from fit() (alternative to model_name).")]
     id: Annotated[str, Arg("id", default="", doc="Optional id column to carry through.")]
     with_proba: Annotated[
         bool, Arg("with_proba", default=False, doc="Also emit per-class probabilities (classifiers).")
@@ -618,7 +618,7 @@ class PredictModel(TableInOutGenerator[PredictArgs]):
 
 @dataclass(slots=True, frozen=True)
 class CrossValArgs:
-    data: Annotated[TableInput, Arg(0, doc="Training table (features + target [+ id]).")]
+    data: Annotated[TableInput, Arg(0, doc="Training rows: features + target [+ id].")]
     estimator: Annotated[str, Arg("estimator", default="lgbm_classifier", doc="Estimator name.")]
     target: Annotated[str, Arg("target", default="", doc="Name of the target/label column (required).")]
     id: Annotated[str, Arg("id", default="", doc="Optional id column to carry through.")]
@@ -772,7 +772,7 @@ class CrossValPredict(SinkBuffer[CrossValArgs, DrainState]):
 
 @dataclass(slots=True, frozen=True)
 class CrossValScoreArgs:
-    data: Annotated[TableInput, Arg(0, doc="Training table (features + target [+ id]).")]
+    data: Annotated[TableInput, Arg(0, doc="Training rows: features + target [+ id].")]
     estimator: Annotated[str, Arg("estimator", default="lgbm_classifier", doc="Estimator name.")]
     target: Annotated[str, Arg("target", default="", doc="Name of the target/label column (required).")]
     id: Annotated[str, Arg("id", default="", doc="Optional id column to exclude from features.")]

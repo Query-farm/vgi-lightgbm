@@ -147,7 +147,7 @@ def _estimator_kwargs(spec: list[_HP], args: Any) -> dict[str, Any]:
 
 def _make_args_class(est_name: str, spec: list[_HP]) -> type:
     fields: list[Any] = [
-        ("data", Annotated[TableInput, Arg(0, doc="Training table (features + target [+ id]).")]),
+        ("data", Annotated[TableInput, Arg(0, doc="Training rows: features + target [+ id].")]),
         (
             "model_name",
             Annotated[
@@ -234,8 +234,10 @@ def _make_fit_function(est_name: str) -> type:
             "examples": [
                 FunctionExample(
                     sql=(
-                        f"SELECT model_name, task FROM lightgbm.{fn_name}((SELECT * FROM training), "
-                        f"model_name := 'm', target := 'y'" + (f", {param_hint}" if param_hint else "") + ")"
+                        f"SELECT model_name, task FROM lightgbm.{fn_name}((SELECT * FROM lightgbm.iris()), "
+                        f"model_name := 'm', target := 'target', id := 'sample_id'"
+                        + (f", {param_hint}" if param_hint else "")
+                        + ")"
                     ),
                     description=f"Train a {est_name} with named hyperparameters",
                 )
