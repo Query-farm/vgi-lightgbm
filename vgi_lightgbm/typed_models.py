@@ -90,6 +90,49 @@ _HPARAMS: dict[str, list[_HP]] = {
     "lgbm_regressor": _common("regression"),
 }
 
+# Per-estimator prose for the typed fit_lgbm_<task> functions: a one-line task
+# summary woven into the rich doc tags below so each generated function gets
+# distinct, estimator-specific documentation rather than a templated string.
+_ESTIMATOR_DOC: dict[str, tuple[str, str]] = {
+    "lgbm_classifier": (
+        "gradient-boosted decision-tree **classifier** (LightGBM's `LGBMClassifier`)",
+        "classification",
+    ),
+    "lgbm_regressor": (
+        "gradient-boosted decision-tree **regressor** (LightGBM's `LGBMRegressor`)",
+        "regression",
+    ),
+}
+
+
+def _typed_doc_tags(est_name: str) -> dict[str, str]:
+    """Build distinct, estimator-specific ``vgi.doc_llm`` / ``vgi.doc_md`` tags."""
+    blurb, task = _ESTIMATOR_DOC[est_name]
+    doc_llm = (
+        f"Buffers a training table and fits a {blurb} with its key hyperparameters exposed as typed, "
+        f"named SQL arguments (`n_estimators`, `num_leaves`, `max_depth`, `learning_rate`, "
+        f"`min_child_samples`, `subsample`, `colsample_bytree`, `reg_alpha`, `reg_lambda`, "
+        f"`boosting_type`, ...). Equivalent to `fit(estimator := '{est_name}', ...)` but discoverable and "
+        f"type-checked in the catalog instead of a JSON `params` blob. Name the {task} label with "
+        f"`target :=`, optionally carry an `id :=` through; every other column is a feature (string "
+        f"columns become LightGBM native categoricals and missing values flow through). Returns the same "
+        f"one-row summary with a reusable `model` BLOB, and persists to the registry when `model_name :=` "
+        f"is given. Feed the BLOB to `predict`/`explain`/`feature_importance`. Sentinel: `max_depth := 0` "
+        f"means unlimited."
+    )
+    doc_md = (
+        f"**`fit_{est_name}`** — fit a {blurb} with typed hyperparameters.\n\n"
+        f"- Input: a training table `(SELECT ...)`; name the label with `target :=`, optional `id :=` "
+        f"passthrough\n"
+        f"- Hyperparameters are named, typed SQL args (`n_estimators`, `num_leaves`, `max_depth`, "
+        f"`learning_rate`, `min_child_samples`, `reg_lambda`, ...) at LightGBM's defaults\n"
+        f"- Returns the standard fit summary plus a reusable `model` BLOB; `model_name :=` also persists "
+        f"it\n\n"
+        f"The discoverable, type-checked alternative to `fit(estimator := '{est_name}', ...)`. "
+        f"`max_depth := 0` = unlimited."
+    )
+    return {"vgi.result_columns_md": _FIT_COLUMNS_MD, "vgi.doc_llm": doc_llm, "vgi.doc_md": doc_md}
+
 
 def _estimator_kwargs(spec: list[_HP], args: Any) -> dict[str, Any]:
     """Translate the typed SQL args into LightGBM estimator kwargs."""
@@ -187,7 +230,7 @@ def _make_fit_function(est_name: str) -> type:
             "name": fn_name,
             "description": f"Fit a {est_name} with typed LightGBM hyperparameters; returns/stores the model",
             "categories": ["models", "supervised", "typed"],
-            "tags": {"vgi.columns_md": _FIT_COLUMNS_MD},
+            "tags": _typed_doc_tags(est_name),
             "examples": [
                 FunctionExample(
                     sql=(

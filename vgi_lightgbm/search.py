@@ -278,7 +278,28 @@ class GridSearch(SinkBuffer[GridSearchArgs, DrainState]):
         name = "grid_search"
         description = "Cross-validated grid search; returns the leaderboard + refit best model BLOB on the best row"
         categories = ["models", "supervised", "search"]
-        tags = {"vgi.columns_md": columns_md(_SEARCH_SCHEMA)}
+        tags = {
+            "vgi.result_columns_md": columns_md(_SEARCH_SCHEMA),
+            "vgi.doc_llm": (
+                "Runs an exhaustive cross-validated grid search over a LightGBM estimator's hyperparameters "
+                "and returns the leaderboard — one row per combination tried, with its `params` (JSON), "
+                "`mean_score`, `std_score`, `rank` (1 = best), and `metric` (accuracy or r2). The estimator "
+                "and its grid are one tagged-union argument: `estimator := union_value(<estimator> := "
+                "{param: [values], ...})`, where the union tag picks the estimator (`lgbm_classifier` / "
+                "`lgbm_regressor`) and each member exposes only that estimator's hyperparameters; omitted "
+                "params stay at their default. Set `target :=`, `cv :=` folds, optional `id :=`. The refit "
+                "best model rides as a `model` BLOB on the single best row — grab it with `WHERE model IS "
+                "NOT NULL`."
+            ),
+            "vgi.doc_md": (
+                "**Cross-validated grid search** — exhaustive hyperparameter sweep.\n\n"
+                "- `estimator := union_value(<estimator> := {param: [values], ...})` (a discriminated "
+                "union; only that estimator's params are exposed)\n"
+                "- `target :=`, `cv :=` folds, optional `id :=`\n"
+                "- Returns the leaderboard: `params`, `mean_score`, `std_score`, `rank`, `metric`\n\n"
+                "The refit best model is a `model` BLOB on the best row — `WHERE model IS NOT NULL`."
+            ),
+        }
         examples = [
             FunctionExample(
                 sql=(
@@ -340,7 +361,28 @@ class RandomizedSearch(SinkBuffer[RandomizedSearchArgs, DrainState]):
         name = "randomized_search"
         description = "Cross-validated randomized search: sample n_iter hyperparameter combinations"
         categories = ["models", "supervised", "search"]
-        tags = {"vgi.columns_md": columns_md(_SEARCH_SCHEMA)}
+        tags = {
+            "vgi.result_columns_md": columns_md(_SEARCH_SCHEMA),
+            "vgi.doc_llm": (
+                "Runs a cross-validated randomized search over a LightGBM estimator, sampling `n_iter :=` "
+                "random hyperparameter combinations (capped at the grid size) instead of exhausting the "
+                "grid — cheaper than `grid_search` for large spaces. Same tagged-union argument: "
+                "`estimator := union_value(<estimator> := {param: [values], ...})`; omitted params stay at "
+                "their default. Set `target :=`, `cv :=` folds, `random_state :=` for reproducible "
+                "sampling, optional `id :=`. Returns the same leaderboard (`params`, `mean_score`, "
+                "`std_score`, `rank`, `metric`) with the refit best model as a `model` BLOB on the best row "
+                "(`WHERE model IS NOT NULL`)."
+            ),
+            "vgi.doc_md": (
+                "**Cross-validated randomized search** — sample the hyperparameter space.\n\n"
+                "- `estimator := union_value(<estimator> := {param: [values], ...})` (discriminated "
+                "union)\n"
+                "- `n_iter :=` combinations to sample (capped at grid size), `random_state :=` for "
+                "reproducibility\n"
+                "- `target :=`, `cv :=` folds, optional `id :=`\n\n"
+                "Cheaper than `grid_search` on large grids; best model is a `model` BLOB on the best row."
+            ),
+        }
         examples = [
             FunctionExample(
                 sql=(

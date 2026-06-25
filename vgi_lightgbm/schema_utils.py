@@ -59,7 +59,7 @@ def _sql_type(t: pa.DataType) -> str:
 
 def columns_md(schema: pa.Schema, *, note: str | None = None) -> str:
     """Render a Markdown table of a table function's RETURN columns for the
-    ``vgi.columns_md`` tag. DuckDB cannot expose a VGI table-function schema,
+    ``vgi.result_columns_md`` tag. DuckDB cannot expose a VGI table-function schema,
     so this documents it. Reads each field's ``comment`` metadata."""
     lines = ["| Column | Type | Description |", "| --- | --- | --- |"]
     for f in schema:

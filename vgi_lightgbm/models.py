@@ -308,7 +308,31 @@ class FitModel(SinkBuffer[FitArgs, DrainState]):
         name = "fit"
         description = "Fit a LightGBM estimator; returns the model as a BLOB and stores it when model_name is given"
         categories = ["models", "supervised"]
-        tags = {"vgi.columns_md": columns_md(_FIT_SCHEMA)}
+        tags = {
+            "vgi.result_columns_md": columns_md(_FIT_SCHEMA),
+            "vgi.doc_llm": (
+                "Buffers a training table, fits a LightGBM estimator (`estimator :=` one of "
+                "`lgbm_classifier` or `lgbm_regressor`), and returns a one-row training summary whose "
+                "`model` column is a self-contained BLOB (booster text + metadata). Name the label column "
+                "with `target :=`; every other column except an optional `id :=` passthrough becomes a "
+                "feature — string columns are used as LightGBM's native categorical features and NULLs are "
+                "kept as missing values. Hyperparameters go in a JSON `params :=` string. Pass "
+                "`model_name :=` to also persist the model to the registry; otherwise it lives only in the "
+                "returned BLOB. Feed that BLOB to `predict`/`explain`/`feature_importance` via "
+                "`SET VARIABLE` + `getvariable()`."
+            ),
+            "vgi.doc_md": (
+                "**Fit a LightGBM model** — train and return a reusable model BLOB.\n\n"
+                "- Input: a training table `(SELECT ...)`; name the label with `target :=`, optionally an "
+                "`id :=` passthrough\n"
+                "- `estimator :=` `lgbm_classifier` | `lgbm_regressor`; hyperparameters via JSON "
+                "`params :=`\n"
+                "- Returns one row: `estimator`, `task`, `n_samples`/`n_features`/`n_classes`/"
+                "`n_categorical`, `train_score`, `features`, and the `model` BLOB\n"
+                "- `model_name :=` also persists to the registry; string features are learned as native "
+                "categoricals and classification labels of any dtype are decoded back on predict"
+            ),
+        }
         examples = [
             FunctionExample(
                 sql=(
@@ -438,7 +462,7 @@ class PredictModel(TableInOutGenerator[PredictArgs]):
         description = "Score a table through a stored model (model_name) or an inline model BLOB"
         categories = ["models", "supervised", "inference"]
         tags = {
-            "vgi.columns_md": columns_md_rows(
+            "vgi.result_columns_md": columns_md_rows(
                 [
                     (
                         "prediction",
@@ -453,7 +477,27 @@ class PredictModel(TableInOutGenerator[PredictArgs]):
                     "`margin` DOUBLE; `pred_leaf := true` emits a `leaf` INTEGER[] (one leaf index per tree). "
                     "With `with_proba := true` on a classifier, one `proba_<label>` DOUBLE column is added per class."
                 ),
-            )
+            ),
+            "vgi.doc_llm": (
+                "Streams a table through an already-fit LightGBM model and emits its predictions. Identify "
+                "the model with either `model_name :=` (a registry name) or `model :=` (a BLOB from `fit`, "
+                "passed via `SET VARIABLE` + `getvariable()` since a table function has only one subquery "
+                "slot). Features are matched by name (order-independent; extra columns ignored; missing "
+                "ones error at bind), and string/categorical columns are re-encoded exactly as at fit. The "
+                "default output is the decoded `prediction` (the original label dtype for classifiers, "
+                "value for regressors); the mutually exclusive modes `with_proba`, `output_margin`, and "
+                "`pred_leaf` switch to per-class probabilities, the raw margin, or per-tree leaf indices "
+                "respectively. Name an `id :=` column to carry it through."
+            ),
+            "vgi.doc_md": (
+                "**Predict with a stored model** — score a table row by row.\n\n"
+                "- Identify the model with `model_name :=` *or* `model :=` (a `fit` BLOB)\n"
+                "- Features aligned by name; an optional `id :=` is carried through\n"
+                "- Default output: `prediction` (label or value)\n"
+                "- `with_proba := true` → one `proba_<label>` column per class; `output_margin := true` → "
+                "a `margin` DOUBLE; `pred_leaf := true` → a `leaf` INTEGER[] (one index per tree) — the "
+                "three modes are mutually exclusive"
+            ),
         }
         examples = [
             FunctionExample(
@@ -603,7 +647,7 @@ class CrossValPredict(SinkBuffer[CrossValArgs, DrainState]):
         description = "Out-of-fold cross-validated predictions (no model is stored)"
         categories = ["models", "supervised", "evaluation"]
         tags = {
-            "vgi.columns_md": columns_md_rows(
+            "vgi.result_columns_md": columns_md_rows(
                 [
                     (
                         "prediction",
@@ -612,7 +656,23 @@ class CrossValPredict(SinkBuffer[CrossValArgs, DrainState]):
                     ),
                 ],
                 note="If an `id` column is named, it is carried through as the first column.",
-            )
+            ),
+            "vgi.doc_llm": (
+                "Computes out-of-fold cross-validated predictions for a training table without persisting "
+                "any model. Each row is predicted by a model trained on the other folds (`cv :=` folds, "
+                "default 5), so the result is an honest, leakage-free prediction per row — ideal for "
+                "building a held-out prediction column to score with metrics or to stack. Name the label "
+                "with `target :=`, pick the `estimator :=`, optionally carry an `id :=` through, and tune "
+                "via JSON `params :=`. Classification labels of any dtype are decoded back to the original "
+                "values."
+            ),
+            "vgi.doc_md": (
+                "**Cross-validated out-of-fold predictions** — no model is stored.\n\n"
+                "- Each row is predicted by a model fit on the *other* folds (`cv :=`, default 5)\n"
+                "- `estimator :=`, `target :=`, optional `id :=` passthrough, JSON `params :=`\n"
+                "- Returns one `prediction` per input row (label or value), leakage-free\n\n"
+                "Use it to make a held-out prediction column for metrics or model stacking."
+            ),
         }
         examples = [
             FunctionExample(
@@ -736,7 +796,24 @@ class CrossValScore(SinkBuffer[CrossValScoreArgs, DrainState]):
         name = "cross_val_score"
         description = "Per-fold cross-validation scores (accuracy or R^2); no model is stored"
         categories = ["models", "supervised", "evaluation"]
-        tags = {"vgi.columns_md": columns_md(_CV_SCORE_SCHEMA)}
+        tags = {
+            "vgi.result_columns_md": columns_md(_CV_SCORE_SCHEMA),
+            "vgi.doc_llm": (
+                "Runs k-fold cross-validation and returns the held-out score for each fold (one `(fold, "
+                "score, metric)` row), without storing any model. Name the label with `target :=`, choose "
+                "the `estimator :=`, set the number of folds with `cv :=` (default 5), and tune via JSON "
+                "`params :=`. The metric is the estimator's own scorer — accuracy for classifiers, R^2 for "
+                "regressors. Aggregate the rows (e.g. `avg(score)`) for a single cross-validated "
+                "performance estimate or to compare estimators/hyperparameters."
+            ),
+            "vgi.doc_md": (
+                "**Cross-validated fold scores** — one row per fold, no model stored.\n\n"
+                "- `estimator :=`, `target :=`, `cv :=` folds (default 5), JSON `params :=`\n"
+                "- Returns `(fold, score, metric)` — the held-out score for each fold\n\n"
+                "Scorer is the estimator's own (accuracy / R^2). Take `avg(score)` for a single "
+                "cross-validated estimate."
+            ),
+        }
         examples = [
             FunctionExample(
                 sql=(
@@ -865,7 +942,23 @@ class ListModels(TableFunctionGenerator[NoArgs]):
         name = "list_models"
         description = "List all models in the registry"
         categories = ["models", "registry"]
-        tags = {"vgi.columns_md": columns_md(_MODEL_INFO_SCHEMA)}
+        tags = {
+            "vgi.result_columns_md": columns_md(_MODEL_INFO_SCHEMA),
+            "vgi.doc_llm": (
+                "Zero-argument table function listing every model persisted to the registry (by `fit` / "
+                "`fit_lgbm_<task>` / search with a `model_name`). One row per model: `model_name`, "
+                "`estimator`, `task`, `target`, training shape (`n_features`/`n_categorical`/`n_samples`/"
+                "`n_classes`), `train_score`, `lightgbm_version`, `created_at`, and the ordered `features` "
+                "list. Query it to discover what is available to `predict`/`explain`/`feature_importance`."
+            ),
+            "vgi.doc_md": (
+                "**Model registry listing** — every saved model, one row each.\n\n"
+                "- `model_name`, `estimator`, `task`, `target`\n"
+                "- `n_features` / `n_categorical` / `n_samples` / `n_classes`, `train_score`\n"
+                "- `lightgbm_version`, `created_at`, `features`\n\n"
+                "Takes no arguments. Use it to find models to score with `predict`."
+            ),
+        }
         examples = [FunctionExample(sql="SELECT * FROM lightgbm.list_models()", description="List stored models")]
 
     @classmethod
@@ -892,7 +985,24 @@ class ModelInfo(TableFunctionGenerator[ModelInfoArgs]):
         name = "model_info"
         description = "Describe a single stored model (one row, empty if absent)"
         categories = ["models", "registry"]
-        tags = {"vgi.columns_md": columns_md(_MODEL_INFO_SCHEMA)}
+        tags = {
+            "vgi.result_columns_md": columns_md(_MODEL_INFO_SCHEMA),
+            "vgi.doc_llm": (
+                "Returns the registry metadata for one model named positionally (`model_info('my_model')`): "
+                "a single row with `model_name`, `estimator`, `task`, `target`, training shape "
+                "(`n_features`/`n_categorical`/`n_samples`/`n_classes`), `train_score`, `lightgbm_version`, "
+                "`created_at`, and the ordered `features` list. Emits zero rows if the model does not "
+                "exist, so it never errors on a missing name. Use it to inspect a specific saved model "
+                "before predicting."
+            ),
+            "vgi.doc_md": (
+                "**Describe one stored model** — its registry metadata.\n\n"
+                "- Call positionally: `model_info('my_model')`\n"
+                "- One row: `estimator`, `task`, `target`, shape, `train_score`, `lightgbm_version`, "
+                "`created_at`, `features`\n\n"
+                "Returns no rows if the name is absent (never errors)."
+            ),
+        }
         examples = [
             FunctionExample(
                 sql="SELECT * FROM lightgbm.model_info('iris_clf')", description="Show one model's metadata"
@@ -935,7 +1045,21 @@ class DropModel(TableFunctionGenerator[DropModelArgs]):
         name = "drop_model"
         description = "Delete a model from the registry"
         categories = ["models", "registry"]
-        tags = {"vgi.columns_md": columns_md(_DROP_SCHEMA)}
+        tags = {
+            "vgi.result_columns_md": columns_md(_DROP_SCHEMA),
+            "vgi.doc_llm": (
+                "Deletes a model from the registry by name (`drop_model('my_model')`) and returns one row "
+                "`(model_name, dropped)` where `dropped` is true when a model was removed and false when "
+                "the name did not exist. Idempotent and safe to call on an absent model. Use it to clean "
+                "up models created by `fit`/`fit_lgbm_<task>`/search with a `model_name`."
+            ),
+            "vgi.doc_md": (
+                "**Delete a stored model** — registry cleanup.\n\n"
+                "- Call positionally: `drop_model('my_model')`\n"
+                "- Returns `(model_name, dropped)`; `dropped` is false if the name did not exist\n\n"
+                "Idempotent — safe on a missing model."
+            ),
+        }
         examples = [
             FunctionExample(sql="SELECT * FROM lightgbm.drop_model('iris_clf')", description="Delete a stored model")
         ]
