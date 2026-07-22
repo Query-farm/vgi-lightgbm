@@ -70,22 +70,24 @@ either 'model_name' or a 'model'
 # ---- grid_search requires a target ----
 statement error
 SELECT * FROM lightgbm.grid_search((SELECT * FROM tr),
-  estimator := union_value(lgbm_classifier := {'num_leaves': [15, 31]}));
+  estimator := 'lgbm_classifier', num_leaves := [15, 31]);
 ----
 requires 'target'
 
 # ---- grid_search rejects a target column that is not in the input ----
 statement error
 SELECT * FROM lightgbm.grid_search((SELECT * FROM tr), target := 'nope',
-  estimator := union_value(lgbm_classifier := {'num_leaves': [15, 31]}));
+  estimator := 'lgbm_classifier', num_leaves := [15, 31]);
 ----
 not found in input
 
 # ---- feature_importance rejects a bad importance_type ----
+# `importance_type` declares machine-readable choices, so the framework rejects
+# an out-of-vocabulary value (and lists the valid ones) before bind runs.
 statement error
 SELECT * FROM lightgbm.feature_importance('valmodel', importance_type := 'bogus');
 ----
-invalid importance_type
+Valid values: 'split', 'gain'
 
 statement ok
 SELECT * FROM lightgbm.drop_model('valmodel');

@@ -48,7 +48,7 @@ class ModelNotFoundError(KeyError):
 
 
 class ModelBlobError(ValueError):
-    """Raised when a model BLOB cannot be decoded."""
+    """Raised when a model `BLOB` cannot be decoded."""
 
 
 def validate_name(name: str) -> str:
@@ -104,7 +104,7 @@ def booster_from_text(text: str) -> lgb.Booster:
 
 
 def pack_model(estimator: Any, meta: ModelMetadata) -> bytes:
-    """Pack a fitted model + metadata into a portable, self-describing BLOB.
+    """Pack a fitted model + metadata into a portable, self-describing `BLOB`.
 
     Layout: magic + uint32 metadata-length + UTF-8 JSON metadata + booster text.
     """
@@ -115,15 +115,15 @@ def pack_model(estimator: Any, meta: ModelMetadata) -> bytes:
 
 
 def unpack_meta(blob: bytes) -> ModelMetadata:
-    """Read just the metadata from a model BLOB (used at bind time)."""
+    """Read just the metadata from a model `BLOB` (used at bind time)."""
     if blob[:8] != _BLOB_MAGIC:
-        raise ModelBlobError("not a LightGBM model BLOB (bad magic header)")
+        raise ModelBlobError("not a LightGBM model `BLOB` (bad magic header)")
     mlen = int.from_bytes(blob[8:12], "big")
     return ModelMetadata.from_dict(json.loads(blob[12 : 12 + mlen].decode("utf-8")))
 
 
 def unpack_model(blob: bytes) -> tuple[lgb.Booster, ModelMetadata]:
-    """Read the booster + metadata from a model BLOB (used at process time)."""
+    """Read the booster + metadata from a model `BLOB` (used at process time)."""
     meta = unpack_meta(blob)
     mlen = int.from_bytes(blob[8:12], "big")
     text = blob[12 + mlen :].decode("utf-8")

@@ -72,8 +72,10 @@ class TestFeatureImportance:
         assert table.num_rows == 3
 
     def test_invalid_importance_type(self, registry) -> None:
+        # `importance_type` declares machine-readable `choices`, so the framework
+        # rejects an out-of-vocabulary value before the function ever binds.
         _save_model(registry)
-        with pytest.raises(ValueError, match="invalid importance_type"):
+        with pytest.raises(ValueError, match="importance_type"):
             invoke_table_function(
                 FeatureImportance,
                 positional=(pa.scalar("m"),),

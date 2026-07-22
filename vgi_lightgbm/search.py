@@ -6,35 +6,33 @@ return the cross-validation leaderboard (one row per combination, ranked by mean
 held-out score) with the **refit best model packed as a BLOB on the single best
 row** (grab it with ``WHERE model IS NOT NULL``).
 
-The estimator and its search grid are a single **tagged-union** argument: the
-union *tag* is the estimator name and the *value* is a struct of hyperparameter
-value-lists. Each member exposes only that estimator's curated hyperparameters
-(the same set the typed ``fit_lgbm_*`` functions expose):
+The estimator is named with the same ``estimator := '<name>'`` VARCHAR argument
+as ``fit`` / ``cross_val_*``, and the search grid is a set of **typed,
+list-valued named arguments** — one per curated hyperparameter (the same set the
+typed ``fit_lgbm_*`` functions expose):
 
-    SELECT params, mean_score, rank FROM lightgbm.grid_search(
-      (SELECT * FROM training), target := 'y',
-      estimator := union_value(lgbm_classifier := {
-        'num_leaves': [15, 31, 63], 'learning_rate': [0.05, 0.1]}), cv := 4)
+    SELECT params, mean_score, rank FROM lightgbm.main.grid_search(
+      (SELECT * FROM training), target := 'y', estimator := 'lgbm_classifier',
+      num_leaves := [15, 31, 63], learning_rate := [0.05, 0.1], cv := 4)
     ORDER BY rank;
 
 Only the hyperparameters you list are searched; the rest stay at the estimator's
 defaults. No model is persisted unless you feed the best-row BLOB back into
-``predict(model := ...)``. Requires a vgi-python with union-tag-preserving
-argument decoding (>= 0.8.3).
+``predict(model := ...)``.
 """
 
 from __future__ import annotations
 
 import itertools
 import json
-from dataclasses import dataclass
-from typing import Annotated, Any, ClassVar
+from dataclasses import dataclass, make_dataclass
+from dataclasses import field as dc_field
+from typing import TYPE_CHECKING, Annotated, Any, ClassVar
 
 import lightgbm as lgb
 import numpy as np
 import pyarrow as pa
 from sklearn.model_selection import KFold, StratifiedKFold
-from vgi import TaggedUnion
 from vgi.arguments import Arg, TableInput
 from vgi.invocation import BindResponse
 from vgi.metadata import FunctionExample
@@ -58,8 +56,8 @@ from .models import (
     build_estimator,
 )
 from .registry import ModelMetadata, now_iso, pack_model, validate_name
-from .schema_utils import columns_md
 from .schema_utils import field as sfield
+from .schema_utils import result_columns_schema
 from .typed_models import _HPARAMS, _UNSET
 
 _PYTYPE_TO_ARROW: dict[type, pa.DataType] = {
@@ -70,28 +68,24 @@ _PYTYPE_TO_ARROW: dict[type, pa.DataType] = {
 }
 
 
-def _member_struct(spec: list) -> pa.DataType:
-    """Struct type for one estimator's grid: each hyperparameter as a list of its scalar type."""
-    return pa.struct([pa.field(hp.name, pa.list_(_PYTYPE_TO_ARROW[hp.type])) for hp in spec])
+# Every searchable hyperparameter, keyed by name. Both estimators expose the same
+# LightGBM knobs (they differ only in their default objective), so one flat set of
+# typed list-valued SQL arguments covers both — see ``_search_args_class``.
+_SEARCH_HPARAMS = {hp.name: hp for spec in _HPARAMS.values() for hp in spec}
 
 
-# One sparse-union member per estimator, tagged by the estimator name. This is
-# the discriminated union surfaced to SQL via union_value(<estimator> := {...}).
-_GRID_UNION = pa.sparse_union([pa.field(name, _member_struct(spec)) for name, spec in _HPARAMS.items()])
-
-
-def _param_grid(tag: str, value: dict[str, Any] | None) -> dict[str, list[Any]]:
-    """Translate a union member value (``{param: [values]}``) into a LightGBM param grid.
+def _param_grid(tag: str, args: Any) -> dict[str, list[Any]]:
+    """Translate the list-valued SQL search arguments into a LightGBM param grid.
 
     Applies the same per-hyperparameter translations as the typed ``fit_<estimator>``
     functions, element-wise (e.g. ``max_depth`` 0 -> -1; ``objective`` '' -> None).
-    Hyperparameters left unset (NULL) are omitted, so they stay at the estimator
-    default rather than being searched.
+    Hyperparameters left empty are omitted, so they stay at the estimator default
+    rather than being searched.
     """
     grid: dict[str, list[Any]] = {}
     for hp in _HPARAMS[tag]:
-        vals = (value or {}).get(hp.name)
-        if vals is None:
+        vals = getattr(args, hp.name, None)
+        if not vals:
             continue
         items: list[Any] = []
         for v in vals:
@@ -100,6 +94,55 @@ def _param_grid(tag: str, value: dict[str, Any] | None) -> dict[str, list[Any]]:
             items.append(v)
         grid[hp.name] = items
     return grid
+
+
+def _search_param_fields() -> list[Any]:
+    """One typed, list-valued SQL argument per searchable hyperparameter.
+
+    A grid is a set of *candidate values per hyperparameter*, so each argument is a
+    list of that hyperparameter's scalar type (``num_leaves := [15, 31]``). Keeping
+    them as separate top-level arguments — rather than one struct/union blob —
+    means DuckDB type-checks each one, autocomplete lists them, and the catalog
+    advertises `estimator` as the same VARCHAR it is on `fit`/`cross_val_*`.
+    """
+    fields: list[Any] = []
+    for name, hp in _SEARCH_HPARAMS.items():
+        arrow = pa.list_(_PYTYPE_TO_ARROW[hp.type])
+        doc = f"Candidate values for {name} (empty = leave at the estimator default). {hp.doc}"
+        fields.append(
+            (
+                name,
+                Annotated[list, Arg(name, default=(), doc=doc, arrow_type=arrow)],
+                dc_field(default=()),
+            )
+        )
+    return fields
+
+
+def _search_args_class(cls_name: str, extra: list[Any]) -> type:
+    """Build a search function's argument dataclass: input + estimator + grid + knobs."""
+    fields: list[Any] = [
+        ("data", Annotated[TableInput, Arg(0, doc="Training rows: features + target [+ id].")]),
+        # No default: the estimator is required, and a placeholder default would
+        # not be one of the declared choices (VGI318).
+        (
+            "estimator",
+            Annotated[str, Arg("estimator", doc="Estimator to search.", choices=sorted(_ESTIMATORS))],
+        ),
+        (
+            "target",
+            Annotated[str, Arg("target", default="", doc="Name of the target/label column (required).")],
+            dc_field(default=""),
+        ),
+        (
+            "id",
+            Annotated[str, Arg("id", default="", doc="Optional id column to exclude from features.")],
+            dc_field(default=""),
+        ),
+        *extra,
+        *_search_param_fields(),
+    ]
+    return make_dataclass(cls_name, fields, frozen=True, slots=True)
 
 
 def _grid_size(space: dict[str, list[Any]]) -> int:
@@ -130,7 +173,7 @@ _SEARCH_SCHEMA = pa.schema(
         sfield("std_score", pa.float64(), "Std-dev of the held-out CV scores.", nullable=False),
         sfield("rank", pa.int32(), "1-based rank by mean_score (1 = best).", nullable=False),
         sfield("metric", pa.string(), "accuracy (classification) or r2 (regression).", nullable=False),
-        sfield("model", pa.large_binary(), "Refit best model as a BLOB (non-NULL only on the best row)."),
+        sfield("model", pa.large_binary(), "Refit best model as a `BLOB` (non-NULL only on the best row)."),
     ]
 )
 
@@ -140,9 +183,10 @@ def _validate_search_bind(name: str, params: BindParams[Any]) -> BindResponse:
     a = params.args
     if not a.target:
         raise ValueError(f"{name} requires 'target' (the label column name, e.g. target := 'label')")
-    tag = getattr(a.estimator, "tag", None)
-    if tag is not None and tag not in _ESTIMATORS:
-        raise ValueError(f"unknown estimator {tag!r}; choose one of: {', '.join(sorted(_ESTIMATORS))}")
+    if not a.estimator:
+        raise ValueError(f"{name} requires 'estimator' (one of: {', '.join(sorted(_ESTIMATORS))})")
+    if a.estimator not in _ESTIMATORS:
+        raise ValueError(f"unknown estimator {a.estimator!r}; choose one of: {', '.join(sorted(_ESTIMATORS))}")
     if getattr(a, "model_name", ""):
         validate_name(a.model_name)
     input_schema = params.bind_call.input_schema
@@ -164,16 +208,13 @@ def _run_search(cls: Any, params: Any, state: DrainState, out: OutputCollector, 
     state.done = True
 
     a = params.args
-    tag = a.estimator.tag
+    tag = a.estimator
     if tag not in _ESTIMATORS:
         raise ValueError(f"unknown estimator {tag!r}")
     task = _ESTIMATORS[tag][0]
-    grid = _param_grid(tag, a.estimator.value)
+    grid = _param_grid(tag, a)
     if not grid:
-        raise ValueError(
-            f"{cls.Meta.name} requires at least one hyperparameter to search, "
-            f"e.g. union_value({tag} := {{'num_leaves': [15, 31]}})"
-        )
+        raise ValueError(f"{cls.Meta.name} requires at least one hyperparameter to search, e.g. num_leaves := [15, 31]")
 
     input_schema = input_schema_of(params)
     feats = _features_excluding(input_schema, a.target, a.id)
@@ -255,20 +296,31 @@ def _run_search(cls: Any, params: Any, state: DrainState, out: OutputCollector, 
     )
 
 
-@dataclass(slots=True, frozen=True)
-class GridSearchArgs:
-    data: Annotated[TableInput, Arg(0, doc="Training rows: features + target [+ id].")]
-    estimator: Annotated[
-        TaggedUnion,
-        Arg(
-            "estimator",
-            arrow_type=_GRID_UNION,
-            doc="union_value(<estimator> := {param: [values], ...}); the tag picks the estimator.",
-        ),
-    ]
-    target: Annotated[str, Arg("target", default="", doc="Name of the target/label column (required).")]
-    id: Annotated[str, Arg("id", default="", doc="Optional id column to exclude from features.")]
-    cv: Annotated[int, Arg("cv", default=5, doc="Number of cross-validation folds.")]
+_GRID_SEARCH_ARGS = _search_args_class(
+    "GridSearchArgs",
+    [
+        (
+            "cv",
+            Annotated[int, Arg("cv", default=5, doc="Number of cross-validation folds.")],
+            dc_field(default=5),
+        )
+    ],
+)
+
+if TYPE_CHECKING:
+    # mypy cannot follow ``dataclasses.make_dataclass``, so it gets a static
+    # stand-in carrying the fields the code below reads. The per-hyperparameter
+    # list arguments are reached only via ``getattr`` in ``_param_grid``.
+    @dataclass(slots=True, frozen=True)
+    class GridSearchArgs:  # noqa: D101 - mirror of the generated dataclass
+        data: TableInput
+        estimator: str
+        target: str
+        id: str
+        cv: int
+
+else:
+    GridSearchArgs = _GRID_SEARCH_ARGS
 
 
 class GridSearch(SinkBuffer[GridSearchArgs, DrainState]):
@@ -276,38 +328,38 @@ class GridSearch(SinkBuffer[GridSearchArgs, DrainState]):
 
     class Meta:
         name = "grid_search"
-        description = "Cross-validated grid search; returns the leaderboard + refit best model BLOB on the best row"
+        description = "Cross-validated grid search; returns the leaderboard + refit best model `BLOB` on the best row"
         categories = ["models", "supervised", "search"]
         tags = {
-            "vgi.result_columns_md": columns_md(_SEARCH_SCHEMA),
+            "vgi.result_columns_schema": result_columns_schema(_SEARCH_SCHEMA),
             "vgi.doc_llm": (
                 "Runs an exhaustive cross-validated grid search over a LightGBM estimator's hyperparameters "
                 "and returns the leaderboard — one row per combination tried, with its `params` (JSON), "
-                "`mean_score`, `std_score`, `rank` (1 = best), and `metric` (accuracy or r2). The estimator "
-                "and its grid are one tagged-union argument: `estimator := union_value(<estimator> := "
-                "{param: [values], ...})`, where the union tag picks the estimator (`lgbm_classifier` / "
-                "`lgbm_regressor`) and each member exposes only that estimator's hyperparameters; omitted "
-                "params stay at their default. Set `target :=`, `cv :=` folds, optional `id :=`. The refit "
-                "best model rides as a `model` BLOB on the single best row — grab it with `WHERE model IS "
+                "`mean_score`, `std_score`, `rank` (1 = best), and `metric` (accuracy or r2). Pick the "
+                "estimator with `estimator := 'lgbm_classifier'` or `'lgbm_regressor'`, then give each "
+                "hyperparameter you want swept its own list of candidate values (`num_leaves := [15, 31]`, "
+                "`learning_rate := [0.05, 0.1]`, `n_estimators := [100, 300]`, ...); anything you leave out "
+                "stays at the estimator default. Set `target :=`, `cv :=` folds, optional `id :=`. The refit "
+                "best model rides as a `model` `BLOB` on the single best row — grab it with `WHERE model IS "
                 "NOT NULL`."
             ),
             "vgi.doc_md": (
                 "**Cross-validated grid search** — exhaustive hyperparameter sweep.\n\n"
-                "- `estimator := union_value(<estimator> := {param: [values], ...})` (a discriminated "
-                "union; only that estimator's params are exposed)\n"
+                "- `estimator := 'lgbm_classifier'` | `'lgbm_regressor'`, then one list per swept "
+                "hyperparameter (`num_leaves := [15, 31]`, `learning_rate := [0.05, 0.1]`, ...)\n"
                 "- `target :=`, `cv :=` folds, optional `id :=`\n"
                 "- Returns the leaderboard: `params`, `mean_score`, `std_score`, `rank`, `metric`\n\n"
-                "The refit best model is a `model` BLOB on the best row — `WHERE model IS NOT NULL`."
+                "The refit best model is a `model` `BLOB` on the best row — `WHERE model IS NOT NULL`."
             ),
         }
         examples = [
             FunctionExample(
                 sql=(
-                    "SELECT params, mean_score, rank FROM lightgbm.grid_search("
+                    "SELECT params, mean_score, rank FROM lightgbm.main.grid_search("
                     "(SELECT sample_id, sepal_length_cm, sepal_width_cm, petal_length_cm, petal_width_cm, target "
-                    "FROM lightgbm.iris()), target := 'target', id := 'sample_id', "
-                    "estimator := union_value(lgbm_classifier := "
-                    "{'num_leaves': [15, 31], 'learning_rate': [0.05, 0.1]})) ORDER BY rank"
+                    "FROM lightgbm.main.iris()), target := 'target', id := 'sample_id', cv := 2, "
+                    "estimator := 'lgbm_classifier', num_leaves := [15, 31], learning_rate := [0.1]) "
+                    "ORDER BY rank"
                 ),
                 description="Grid-search num_leaves x learning_rate on iris",
             )
@@ -334,24 +386,44 @@ class GridSearch(SinkBuffer[GridSearchArgs, DrainState]):
         _run_search(cls, params, state, out, lambda combos, a: combos)
 
 
-@dataclass(slots=True, frozen=True)
-class RandomizedSearchArgs:
-    data: Annotated[TableInput, Arg(0, doc="Training rows: features + target [+ id].")]
-    estimator: Annotated[
-        TaggedUnion,
-        Arg(
-            "estimator",
-            arrow_type=_GRID_UNION,
-            doc="union_value(<estimator> := {param: [values], ...}); the tag picks the estimator.",
+_RANDOMIZED_SEARCH_ARGS = _search_args_class(
+    "RandomizedSearchArgs",
+    [
+        (
+            "n_iter",
+            Annotated[
+                int,
+                Arg("n_iter", default=10, doc="Number of random combinations to sample (capped at grid size)."),
+            ],
+            dc_field(default=10),
         ),
-    ]
-    target: Annotated[str, Arg("target", default="", doc="Name of the target/label column (required).")]
-    id: Annotated[str, Arg("id", default="", doc="Optional id column to exclude from features.")]
-    n_iter: Annotated[
-        int, Arg("n_iter", default=10, doc="Number of random combinations to sample (capped at grid size).")
-    ]
-    cv: Annotated[int, Arg("cv", default=5, doc="Number of cross-validation folds.")]
-    random_state: Annotated[int, Arg("random_state", default=0, doc="Random seed for the sampler.")]
+        (
+            "cv",
+            Annotated[int, Arg("cv", default=5, doc="Number of cross-validation folds.")],
+            dc_field(default=5),
+        ),
+        (
+            "search_seed",
+            Annotated[int, Arg("search_seed", default=0, doc="Random seed for the combination sampler.")],
+            dc_field(default=0),
+        ),
+    ],
+)
+
+if TYPE_CHECKING:
+
+    @dataclass(slots=True, frozen=True)
+    class RandomizedSearchArgs:  # noqa: D101 - mirror of the generated dataclass
+        data: TableInput
+        estimator: str
+        target: str
+        id: str
+        n_iter: int
+        cv: int
+        search_seed: int
+
+else:
+    RandomizedSearchArgs = _RANDOMIZED_SEARCH_ARGS
 
 
 class RandomizedSearch(SinkBuffer[RandomizedSearchArgs, DrainState]):
@@ -362,35 +434,35 @@ class RandomizedSearch(SinkBuffer[RandomizedSearchArgs, DrainState]):
         description = "Cross-validated randomized search: sample n_iter hyperparameter combinations"
         categories = ["models", "supervised", "search"]
         tags = {
-            "vgi.result_columns_md": columns_md(_SEARCH_SCHEMA),
+            "vgi.result_columns_schema": result_columns_schema(_SEARCH_SCHEMA),
             "vgi.doc_llm": (
                 "Runs a cross-validated randomized search over a LightGBM estimator, sampling `n_iter :=` "
                 "random hyperparameter combinations (capped at the grid size) instead of exhausting the "
-                "grid — cheaper than `grid_search` for large spaces. Same tagged-union argument: "
-                "`estimator := union_value(<estimator> := {param: [values], ...})`; omitted params stay at "
-                "their default. Set `target :=`, `cv :=` folds, `random_state :=` for reproducible "
-                "sampling, optional `id :=`. Returns the same leaderboard (`params`, `mean_score`, "
-                "`std_score`, `rank`, `metric`) with the refit best model as a `model` BLOB on the best row "
+                "grid — cheaper than `grid_search` for large spaces. Same arguments: `estimator :=` names "
+                "the estimator and each swept hyperparameter takes a list of candidate values; omitted "
+                "params stay at their default. Set `target :=`, `cv :=` folds, `search_seed :=` for "
+                "reproducible sampling, optional `id :=`. Returns the same leaderboard (`params`, `mean_score`, "
+                "`std_score`, `rank`, `metric`) with the refit best model as a `model` `BLOB` on the best row "
                 "(`WHERE model IS NOT NULL`)."
             ),
             "vgi.doc_md": (
                 "**Cross-validated randomized search** — sample the hyperparameter space.\n\n"
-                "- `estimator := union_value(<estimator> := {param: [values], ...})` (discriminated "
-                "union)\n"
-                "- `n_iter :=` combinations to sample (capped at grid size), `random_state :=` for "
+                "- `estimator := 'lgbm_classifier'` | `'lgbm_regressor'`, then one list per swept "
+                "hyperparameter\n"
+                "- `n_iter :=` combinations to sample (capped at grid size), `search_seed :=` for "
                 "reproducibility\n"
                 "- `target :=`, `cv :=` folds, optional `id :=`\n\n"
-                "Cheaper than `grid_search` on large grids; best model is a `model` BLOB on the best row."
+                "Cheaper than `grid_search` on large grids; best model is a `model` `BLOB` on the best row."
             ),
         }
         examples = [
             FunctionExample(
                 sql=(
-                    "SELECT params, mean_score, rank FROM lightgbm.randomized_search("
+                    "SELECT params, mean_score, rank FROM lightgbm.main.randomized_search("
                     "(SELECT sample_id, sepal_length_cm, sepal_width_cm, petal_length_cm, petal_width_cm, target "
-                    "FROM lightgbm.iris()), target := 'target', id := 'sample_id', n_iter := 4, "
-                    "estimator := union_value(lgbm_classifier := "
-                    "{'num_leaves': [15, 31, 63], 'learning_rate': [0.05, 0.1, 0.2]})) ORDER BY rank"
+                    "FROM lightgbm.main.iris()), target := 'target', id := 'sample_id', n_iter := 2, "
+                    "cv := 2, estimator := 'lgbm_classifier', num_leaves := [15, 31, 63], "
+                    "learning_rate := [0.05, 0.1, 0.2]) ORDER BY rank"
                 ),
                 description="Randomized-search num_leaves x learning_rate on iris",
             )
@@ -419,7 +491,7 @@ class RandomizedSearch(SinkBuffer[RandomizedSearchArgs, DrainState]):
             params,
             state,
             out,
-            lambda combos, a: _select_combos(combos, a.n_iter, a.random_state),
+            lambda combos, a: _select_combos(combos, a.n_iter, a.search_seed),
         )
 
 

@@ -6,7 +6,21 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+- **The worker could no longer be attached.** `vgi-python` 0.8.5 predates the
+  `attach_catalogs` field the current community `vgi` extension requires, so
+  every `ATTACH` failed with *"Worker returned an out-of-date Apache Arrow
+  schema. RPC response schema mismatch for 'catalog_attach' (field count
+  differs: expected 15, actual 14)"*. Bumped to `vgi-python>=0.17.0` /
+  `vgi-rpc>=0.26.1`.
+
 ### Added
+- `vgi.agent_test_tasks`: an 18-task agent-suitability suite covering every
+  function the worker exposes, for `vgi-lint simulate`.
+- Per-schema `vgi.categories` navigation registry and a `vgi.category` on every
+  table and function.
+- Per-column units/definitions on the wine, breast-cancer, diabetes and
+  California-housing feature columns.
 - `randomized_search`: cross-validated random hyperparameter search (`n_iter`,
   `random_state`, capped at the grid size).
 - `permutation_importance`: model-agnostic ranked feature importance.
@@ -16,7 +30,20 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (per-tree leaf indices), mutually exclusive.
 
 ### Changed
-- **Breaking:** `grid_search` now takes the estimator + grid as a typed
+- **Breaking:** `grid_search` / `randomized_search` now take a plain
+  `estimator := 'lgbm_classifier'` plus one typed, list-valued argument per swept
+  hyperparameter (`num_leaves := [15, 31]`), replacing the
+  `union_value(<estimator> := {...})` tagged union. `randomized_search`'s sampler
+  seed is now `search_seed` (`random_state` is itself a searchable
+  hyperparameter).
+- **Breaking:** the regression datasets name their target for what it is —
+  `diabetes.progression` and `california_housing.median_house_value` — so the
+  catalog-wide `target` column is one type (the classification class label).
+- **Breaking:** `list_models` is now `models`, and its `target` column is
+  `target_column` (it holds a column *name*).
+- Retired `vgi.result_columns_md` tags migrated to the structured
+  `vgi.result_columns_schema` / `vgi.result_dynamic_columns_md`.
+- (superseded) `grid_search` took the estimator + grid as a typed
   discriminated-union argument (`estimator := union_value(<estimator> := {param:
   [values]})`) instead of the JSON `grid := '...'` string; only the listed
   hyperparameters are searched.

@@ -15,8 +15,8 @@
 
 All accept either a registry ``model_name`` or an inline ``model`` BLOB.
 
-    SELECT * FROM lightgbm.feature_importance('iris_clf', importance_type := 'gain');
-    SELECT * FROM lightgbm.explain((SELECT * FROM new_data), model_name := 'house_reg', id := 'id');
+    SELECT * FROM lightgbm.main.feature_importance('iris_clf', importance_type := 'gain');
+    SELECT * FROM lightgbm.main.explain((SELECT * FROM new_data), model_name := 'house_reg', id := 'id');
 """
 
 from __future__ import annotations
@@ -56,8 +56,8 @@ from .registry import (
     unpack_meta,
     unpack_model,
 )
-from .schema_utils import columns_md, columns_md_rows
 from .schema_utils import field as sfield
+from .schema_utils import result_columns_schema, result_dynamic_columns_md
 
 _IMPORTANCE_TYPES = {"split", "gain"}
 
@@ -145,7 +145,13 @@ class FeatureImportanceArgs:
     model_name: Annotated[str, Arg(0, doc="Name of a stored model (pass '' to use model:= instead).")]
     model: Annotated[bytes, Arg("model", default=b"", doc="A fitted model (alternative to model_name).")]
     importance_type: Annotated[
-        str, Arg("importance_type", default="gain", doc="split (split count) or gain (total gain).")
+        str,
+        Arg(
+            "importance_type",
+            default="gain",
+            doc="How importance is measured: split counts a feature's splits, gain totals their gain.",
+            choices=["split", "gain"],
+        ),
     ]
 
 
@@ -168,19 +174,19 @@ class FeatureImportance(TableFunctionGenerator[FeatureImportanceArgs]):
         description = "Per-feature importance (split or gain) for a model, ranked"
         categories = ["models", "interpretation"]
         tags = {
-            "vgi.result_columns_md": columns_md(_IMPORTANCE_SCHEMA),
+            "vgi.result_columns_schema": result_columns_schema(_IMPORTANCE_SCHEMA),
             "vgi.doc_llm": (
                 "Returns the booster's built-in per-feature importance for a stored model, one ranked row "
                 "per feature (`feature`, `importance`, `rank`; rank 1 = most important, already sorted "
                 "descending). Identify the model positionally by name (`feature_importance('m')`) or with "
-                "`model :=` (a BLOB). Choose the `importance_type :=` — `gain` (default; total gain of the "
+                "`model :=` (a `BLOB`). Choose the `importance_type :=` — `gain` (default; total gain of the "
                 "feature's splits) or `split` (the number of times the feature is used in a split). "
                 "Features never used in a split report importance 0. A fast, model-native ranking; for a "
                 "model-agnostic alternative use `permutation_importance`."
             ),
             "vgi.doc_md": (
                 "**Booster feature importance** — model-native, ranked.\n\n"
-                "- Identify the model by name (`feature_importance('m')`) or `model :=` BLOB\n"
+                "- Identify the model by name (`feature_importance('m')`) or `model :=` `BLOB`\n"
                 "- `importance_type :=` `gain` (default; total split gain) | `split` (split count)\n"
                 "- Returns `(feature, importance, rank)`, sorted by importance descending\n\n"
                 "Unused features score 0. See `permutation_importance` for a model-agnostic measure."
@@ -188,7 +194,10 @@ class FeatureImportance(TableFunctionGenerator[FeatureImportanceArgs]):
         }
         examples = [
             FunctionExample(
-                sql="SELECT * FROM lightgbm.feature_importance('iris_clf', importance_type := 'gain')",
+                sql=(
+                    "SELECT feature, round(importance, 3) AS importance FROM lightgbm.main.feature_importance("
+                    "'iris_clf', importance_type := 'gain') WHERE rank <= 5 ORDER BY rank"
+                ),
                 description="Gain-based feature importance for a stored model",
             )
         ]
@@ -251,16 +260,30 @@ class ExplainModel(TableInOutGenerator[ExplainArgs]):
         description = "Per-row SHAP feature contributions, long format (row, [class], feature, shap_value, base_value)"
         categories = ["models", "interpretation", "inference"]
         tags = {
-            "vgi.result_columns_md": columns_md_rows(
+            "vgi.result_dynamic_columns_md": result_dynamic_columns_md(
                 [
-                    ("feature", "VARCHAR", "Feature column name."),
-                    ("shap_value", "DOUBLE", "Contribution of the feature to the raw margin."),
-                    ("base_value", "DOUBLE", "Model base (expected) raw-margin value."),
+                    (
+                        "Always present",
+                        [
+                            ("feature", "VARCHAR", "Feature column name."),
+                            ("shap_value", "DOUBLE", "Contribution of the feature to the raw margin."),
+                            ("base_value", "DOUBLE", "Model base (expected) raw-margin value."),
+                        ],
+                    ),
+                    (
+                        "Multiclass models only",
+                        [("class", "BIGINT", "Class index the contribution belongs to (0-based).")],
+                    ),
+                    (
+                        "`id := '<column>'` passthrough",
+                        [("sample_id", "INTEGER", "The named id column, carried through as the first column.")],
+                    ),
                 ],
                 note=(
-                    "Long format: one row per (input row, feature). If an `id` column is named, it is carried "
-                    "through as the first column. For multiclass models a `class` BIGINT column is added "
-                    "(one row per (input row, class, feature))."
+                    "Long format: one row per (input row, feature). Naming `id :=` carries that input "
+                    "column through as the first column (the table below shows the common `sample_id` "
+                    "case), and a multiclass model adds a `class` column so there is one row per "
+                    "(input row, class, feature)."
                 ),
             ),
             "vgi.doc_llm": (
@@ -268,7 +291,7 @@ class ExplainModel(TableInOutGenerator[ExplainArgs]):
                 "contributions (LightGBM's `pred_contrib`) in long format: one row per (input row, "
                 "feature) with `feature`, `shap_value` (how much that feature pushed this row's raw margin "
                 "away from the model's base), and `base_value` (the expected margin). Identify the model "
-                "with `model_name :=` or `model :=` (a BLOB); name an `id :=` to tag every emitted row. "
+                "with `model_name :=` or `model :=` (a `BLOB`); name an `id :=` to tag every emitted row. "
                 "For multiclass models an extra `class` column appears (one row per (row, class, "
                 "feature)). Sum `shap_value` over a row's features and add `base_value` to recover the raw "
                 "margin. Use it for local, per-prediction explanations."
@@ -277,15 +300,16 @@ class ExplainModel(TableInOutGenerator[ExplainArgs]):
                 "**SHAP explanations** — per-row feature contributions, long format.\n\n"
                 "- Identify the model with `model_name :=` or `model :=`; optional `id :=` passthrough\n"
                 "- One row per (input row, feature): `feature`, `shap_value`, `base_value`\n"
-                "- Multiclass adds a `class` BIGINT column (one row per (row, class, feature))\n\n"
+                "- Multiclass adds a `class` `BIGINT` column (one row per (row, class, feature))\n\n"
                 "`sum(shap_value) + base_value` = the row's raw margin. Local, per-prediction explanation."
             ),
         }
         examples = [
             FunctionExample(
                 sql=(
-                    "SELECT * FROM lightgbm.explain((SELECT * FROM lightgbm.diabetes()), "
-                    "model_name := 'diab_reg', id := 'sample_id')"
+                    "SELECT feature, round(avg(abs(shap_value)), 4) AS mean_abs_shap "
+                    "FROM lightgbm.main.explain((SELECT * FROM lightgbm.main.diabetes()), "
+                    "model_name := 'diab_reg', id := 'sample_id') GROUP BY feature ORDER BY mean_abs_shap DESC"
                 ),
                 description="Explain each row's prediction with per-feature contributions",
             )
@@ -418,7 +442,7 @@ class PermutationImportance(SinkBuffer[PermImportanceArgs, DrainState]):
         description = "Model-agnostic feature importance: the drop in score when each feature is shuffled, ranked"
         categories = ["models", "interpretation", "evaluation"]
         tags = {
-            "vgi.result_columns_md": columns_md(_PERM_SCHEMA),
+            "vgi.result_columns_schema": result_columns_schema(_PERM_SCHEMA),
             "vgi.doc_llm": (
                 "Computes model-agnostic permutation importance over an evaluation table: for each "
                 "feature, shuffle its values `n_repeats :=` times and measure the resulting drop in the "
@@ -440,8 +464,11 @@ class PermutationImportance(SinkBuffer[PermImportanceArgs, DrainState]):
         examples = [
             FunctionExample(
                 sql=(
-                    "SELECT * FROM lightgbm.permutation_importance((SELECT * FROM lightgbm.iris()), "
-                    "model_name := 'iris_clf', target := 'target') ORDER BY rank"
+                    "SELECT feature, round(importance, 4) AS importance "
+                    "FROM lightgbm.main.permutation_importance("
+                    "(SELECT * EXCLUDE (target_name) FROM lightgbm.main.iris()), "
+                    "model_name := 'iris_clf', target := 'target', n_repeats := 1) "
+                    "WHERE rank <= 3 ORDER BY rank"
                 ),
                 description="Rank iris features by permutation importance for a stored model",
             )
@@ -451,7 +478,7 @@ class PermutationImportance(SinkBuffer[PermImportanceArgs, DrainState]):
     def on_bind(cls, params: BindParams[PermImportanceArgs]) -> BindResponse:
         a = params.args
         if not a.model_name and not a.model:
-            raise ValueError("permutation_importance requires either 'model_name' or 'model' (a model BLOB)")
+            raise ValueError("permutation_importance requires either 'model_name' or 'model' (a model `BLOB`)")
         if not a.target:
             raise ValueError("permutation_importance requires 'target' (the label column name)")
         input_schema = params.bind_call.input_schema
@@ -560,7 +587,7 @@ class PartialDependence(SinkBuffer[PartialDependenceArgs, DrainState]):
         description = "How a stored model's average prediction changes as one feature varies over a grid"
         categories = ["models", "interpretation"]
         tags = {
-            "vgi.result_columns_md": columns_md(_PD_SCHEMA),
+            "vgi.result_columns_schema": result_columns_schema(_PD_SCHEMA),
             "vgi.doc_llm": (
                 "Computes the partial-dependence curve for one numeric feature: sweeps `feature :=` over a "
                 "grid of `grid_resolution :=` points and reports the model's average prediction at each "
@@ -582,8 +609,11 @@ class PartialDependence(SinkBuffer[PartialDependenceArgs, DrainState]):
         examples = [
             FunctionExample(
                 sql=(
-                    "SELECT * FROM lightgbm.partial_dependence((SELECT * FROM lightgbm.iris()), "
-                    "model_name := 'iris_clf', feature := 'petal_length_cm') ORDER BY feature_value"
+                    "SELECT feature_value, round(partial_dependence, 4) AS pd "
+                    "FROM lightgbm.main.partial_dependence("
+                    "(SELECT * EXCLUDE (target_name) FROM lightgbm.main.iris()), "
+                    "model_name := 'iris_clf', feature := 'petal_length_cm', grid_resolution := 5) "
+                    "WHERE class = 0 ORDER BY feature_value"
                 ),
                 description="Partial dependence of 'iris_clf' on petal length",
             )
@@ -593,7 +623,7 @@ class PartialDependence(SinkBuffer[PartialDependenceArgs, DrainState]):
     def on_bind(cls, params: BindParams[PartialDependenceArgs]) -> BindResponse:
         a = params.args
         if not a.model_name and not a.model:
-            raise ValueError("partial_dependence requires either 'model_name' or 'model' (a model BLOB)")
+            raise ValueError("partial_dependence requires either 'model_name' or 'model' (a model `BLOB`)")
         if not a.feature:
             raise ValueError("partial_dependence requires 'feature' (the column to vary)")
         input_schema = params.bind_call.input_schema

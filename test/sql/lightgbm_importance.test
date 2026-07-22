@@ -18,7 +18,7 @@ CREATE TEMP VIEW diab_x AS
 # train a regression model to interpret
 statement ok
 SELECT * FROM lightgbm.fit((SELECT * FROM lightgbm.diabetes()), model_name => 'diab_imp',
-                           estimator => 'lgbm_regressor', target => 'target', id => 'sample_id');
+                           estimator => 'lgbm_regressor', target => 'progression', id => 'sample_id');
 
 # ---- feature_importance: one ranked row per feature ----
 
@@ -93,14 +93,14 @@ SELECT count(*) FROM lightgbm.explain(
 
 query II
 SELECT count(*), max(rank) FROM lightgbm.permutation_importance((SELECT * FROM lightgbm.diabetes()),
-  model_name => 'diab_imp', target => 'target', n_repeats => 3);
+  model_name => 'diab_imp', target => 'progression', n_repeats => 3);
 ----
 10	10
 
 # rank is consistent with importance_mean (rank 1 has the largest mean)
 query I
 SELECT importance_mean = max(importance_mean) OVER () FROM lightgbm.permutation_importance(
-  (SELECT * FROM lightgbm.diabetes()), model_name => 'diab_imp', target => 'target', n_repeats => 3)
+  (SELECT * FROM lightgbm.diabetes()), model_name => 'diab_imp', target => 'progression', n_repeats => 3)
 WHERE rank = 1;
 ----
 true
@@ -109,7 +109,7 @@ true
 query I
 WITH p AS (
   SELECT importance_mean, rank FROM lightgbm.permutation_importance((SELECT * FROM lightgbm.diabetes()),
-    model_name => 'diab_imp', target => 'target', n_repeats => 3))
+    model_name => 'diab_imp', target => 'progression', n_repeats => 3))
 SELECT count(*) = 0 FROM p a JOIN p b ON a.importance_mean > b.importance_mean WHERE a.rank > b.rank;
 ----
 true

@@ -21,7 +21,7 @@ CREATE TEMP VIEW iris_xy AS
 query II
 SELECT count(*), max(rank) FROM lightgbm.grid_search((SELECT * FROM iris_xy),
   target => 'target', id => 'sample_id',
-  estimator => union_value(lgbm_classifier := {'num_leaves': [15, 31], 'learning_rate': [0.05, 0.1]}), cv => 4);
+  estimator => 'lgbm_classifier', num_leaves := [15, 31], learning_rate := [0.05, 0.1], cv => 4);
 ----
 4	4
 
@@ -30,7 +30,7 @@ SELECT count(*), max(rank) FROM lightgbm.grid_search((SELECT * FROM iris_xy),
 query I
 SELECT count(*) FROM lightgbm.grid_search((SELECT * FROM iris_xy),
   target => 'target', id => 'sample_id',
-  estimator => union_value(lgbm_classifier := {'num_leaves': [15, 31], 'learning_rate': [0.05, 0.1]}), cv => 4)
+  estimator => 'lgbm_classifier', num_leaves := [15, 31], learning_rate := [0.05, 0.1], cv => 4)
 WHERE model IS NOT NULL;
 ----
 1
@@ -40,7 +40,7 @@ WHERE model IS NOT NULL;
 query I
 SELECT rank = 1 AND mean_score > 0.85 FROM lightgbm.grid_search((SELECT * FROM iris_xy),
   target => 'target', id => 'sample_id',
-  estimator => union_value(lgbm_classifier := {'num_leaves': [15, 31]}), cv => 4)
+  estimator => 'lgbm_classifier', num_leaves := [15, 31], cv => 4)
 WHERE model IS NOT NULL;
 ----
 true
@@ -51,7 +51,7 @@ statement ok
 SET VARIABLE best = (
   SELECT model FROM lightgbm.grid_search((SELECT * FROM iris_xy),
     target => 'target', id => 'sample_id',
-    estimator => union_value(lgbm_classifier := {'num_leaves': [15, 31]}), cv => 4)
+    estimator => 'lgbm_classifier', num_leaves := [15, 31], cv => 4)
   WHERE model IS NOT NULL);
 
 query I
@@ -66,7 +66,7 @@ SELECT count(DISTINCT prediction) FROM lightgbm.predict(
 query I
 SELECT count(*) FROM lightgbm.grid_search((SELECT * FROM iris_xy),
   target => 'target', id => 'sample_id',
-  estimator => union_value(lgbm_classifier := {'max_depth': [0, 3, 5]}), cv => 3);
+  estimator => 'lgbm_classifier', max_depth := [0, 3, 5], cv => 3);
 ----
 3
 
@@ -76,7 +76,7 @@ SELECT count(*) FROM lightgbm.grid_search((SELECT * FROM iris_xy),
 query I
 SELECT count(*) FROM lightgbm.randomized_search((SELECT * FROM iris_xy),
   target => 'target', id => 'sample_id', n_iter => 4,
-  estimator => union_value(lgbm_classifier := {'num_leaves': [7, 15, 31], 'learning_rate': [0.03, 0.05, 0.1]}), cv => 3);
+  estimator => 'lgbm_classifier', num_leaves := [7, 15, 31], learning_rate := [0.03, 0.05, 0.1], cv => 3);
 ----
 4
 
@@ -84,7 +84,7 @@ SELECT count(*) FROM lightgbm.randomized_search((SELECT * FROM iris_xy),
 query I
 SELECT count(*) FROM lightgbm.randomized_search((SELECT * FROM iris_xy),
   target => 'target', id => 'sample_id', n_iter => 100,
-  estimator => union_value(lgbm_classifier := {'num_leaves': [15, 31], 'learning_rate': [0.05, 0.1]}), cv => 3);
+  estimator => 'lgbm_classifier', num_leaves := [15, 31], learning_rate := [0.05, 0.1], cv => 3);
 ----
 4
 
@@ -92,7 +92,7 @@ SELECT count(*) FROM lightgbm.randomized_search((SELECT * FROM iris_xy),
 query I
 SELECT count(*) FROM lightgbm.randomized_search((SELECT * FROM iris_xy),
   target => 'target', id => 'sample_id', n_iter => 3,
-  estimator => union_value(lgbm_classifier := {'num_leaves': [15, 31, 63]}), cv => 3)
+  estimator => 'lgbm_classifier', num_leaves := [15, 31, 63], cv => 3)
 WHERE model IS NOT NULL;
 ----
 1
@@ -101,8 +101,8 @@ WHERE model IS NOT NULL;
 
 query I
 SELECT count(*) = 2 FROM lightgbm.grid_search((SELECT * FROM lightgbm.diabetes()),
-  target => 'target', id => 'sample_id',
-  estimator => union_value(lgbm_regressor := {'num_leaves': [15, 31]}), cv => 3);
+  target => 'progression', id => 'sample_id',
+  estimator => 'lgbm_regressor', num_leaves := [15, 31], cv => 3);
 ----
 true
 

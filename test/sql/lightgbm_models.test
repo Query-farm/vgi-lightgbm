@@ -33,7 +33,7 @@ classification	150	4
 # ---- it is now in the registry ----
 
 query II
-SELECT model_name, task FROM lightgbm.list_models() WHERE model_name = 'iris_clf';
+SELECT model_name, task FROM lightgbm.main.models() WHERE model_name = 'iris_clf';
 ----
 iris_clf	classification
 
@@ -105,7 +105,7 @@ true
 
 query I
 SELECT task FROM lightgbm.fit((SELECT * FROM lightgbm.diabetes()), model_name => 'diab_reg',
-                              estimator => 'lgbm_regressor', target => 'target', id => 'sample_id');
+                              estimator => 'lgbm_regressor', target => 'progression', id => 'sample_id');
 ----
 regression
 
@@ -113,7 +113,7 @@ regression
 
 query I
 SELECT count(*) FROM lightgbm.cross_val_predict((SELECT * FROM lightgbm.diabetes()),
-  estimator => 'lgbm_regressor', target => 'target', id => 'sample_id', cv => 3);
+  estimator => 'lgbm_regressor', target => 'progression', id => 'sample_id', cv => 3);
 ----
 442
 
@@ -143,7 +143,7 @@ FROM lightgbm.fit((SELECT id, x, color, target FROM catdata), model_name => 'cat
 1	2
 
 query I
-SELECT n_categorical FROM lightgbm.list_models() WHERE model_name = 'catm';
+SELECT n_categorical FROM lightgbm.main.models() WHERE model_name = 'catm';
 ----
 1
 

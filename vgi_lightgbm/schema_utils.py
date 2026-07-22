@@ -6,6 +6,7 @@ dataset/model function exposes consistent, documented schemas to DuckDB.
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 
@@ -54,34 +55,56 @@ def _sql_type(t: pa.DataType) -> str:
         return "BLOB"
     if pa.types.is_list(t) or pa.types.is_large_list(t):
         return f"{_sql_type(t.value_type)}[]"
+    # A dictionary-encoded column is just its value type on the DuckDB side --
+    # the encoding is a transport detail, not part of the SQL schema.
+    if pa.types.is_dictionary(t):
+        return _sql_type(t.value_type)
     return str(t)
 
 
-def columns_md(schema: pa.Schema, *, note: str | None = None) -> str:
-    """Render a Markdown table of a table function's RETURN columns for the
-    ``vgi.result_columns_md`` tag. DuckDB cannot expose a VGI table-function schema,
-    so this documents it. Reads each field's ``comment`` metadata."""
-    lines = ["| Column | Type | Description |", "| --- | --- | --- |"]
-    for f in schema:
-        desc = ""
-        if f.metadata and b"comment" in f.metadata:
-            desc = f.metadata[b"comment"].decode("utf-8")
-        lines.append(f"| `{f.name}` | {_sql_type(f.type)} | {desc} |")
-    md = "\n".join(lines)
-    if note:
-        md += f"\n\n{note}"
-    return md
+def _field_comment(f: pa.Field) -> str:
+    """Read a field's ``comment`` metadata (empty string when absent)."""
+    if f.metadata and b"comment" in f.metadata:
+        return str(f.metadata[b"comment"].decode("utf-8"))
+    return ""
 
 
-def columns_md_rows(rows: list[tuple[str, str, str]], *, note: str | None = None) -> str:
-    """Same Markdown table, from explicit (column, type, description) rows --
-    for functions whose output schema is computed dynamically at bind."""
-    lines = ["| Column | Type | Description |", "| --- | --- | --- |"]
-    lines += [f"| `{n}` | {t} | {d} |" for n, t, d in rows]
-    md = "\n".join(lines)
-    if note:
-        md += f"\n\n{note}"
-    return md
+def result_columns_schema(schema: pa.Schema) -> str:
+    """Render a table function's *static* RETURN columns as ``vgi.result_columns_schema``.
+
+    DuckDB cannot expose a VGI table-function result schema up front, so the
+    worker declares it: a JSON array of ``{name, type, description}``, one entry
+    per returned column, with the type rendered as a real DuckDB type name and the
+    description read from the field's ``comment`` metadata. Use this only when the
+    schema does not depend on the call's arguments; otherwise see
+    :func:`result_dynamic_columns_md`.
+    """
+    return json.dumps([{"name": f.name, "type": _sql_type(f.type), "description": _field_comment(f)} for f in schema])
+
+
+def result_columns_schema_rows(rows: list[tuple[str, str, str]]) -> str:
+    """Same as :func:`result_columns_schema`, from explicit ``(name, type, description)`` rows."""
+    return json.dumps([{"name": n, "type": t, "description": d} for n, t, d in rows])
+
+
+def result_dynamic_columns_md(
+    variants: list[tuple[str, list[tuple[str, str, str]]]],
+    *,
+    note: str,
+) -> str:
+    """Render ``vgi.result_dynamic_columns_md`` for a schema that varies by argument.
+
+    ``note`` explains *how* the schema varies; ``variants`` is a list of
+    ``(caption, rows)`` pairs, one Markdown ``Name | Type | Description`` table per
+    result-shape variant (the caption becomes the heading that says when that
+    variant applies).
+    """
+    parts = [note]
+    for caption, rows in variants:
+        block = [f"#### {caption}", "", "| Name | Type | Description |", "| --- | --- | --- |"]
+        block += [f"| `{n}` | {t} | {d} |" for n, t, d in rows]
+        parts.append("\n".join(block))
+    return "\n\n".join(parts)
 
 
 _NON_IDENT = re.compile(r"[^0-9a-z]+")

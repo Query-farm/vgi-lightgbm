@@ -5,7 +5,7 @@ These wrap the generic ``fit`` with LightGBM's common hyperparameters exposed as
 DuckDB's autocomplete, are type-checked, and are discoverable without consulting
 docs:
 
-    SELECT * FROM lightgbm.fit_lgbm_classifier(
+    SELECT * FROM lightgbm.main.fit_lgbm_classifier(
       (SELECT * FROM training), model_name := 'm', target := 'y',
       n_estimators := 300, num_leaves := 63, learning_rate := 0.05);
 
@@ -35,18 +35,18 @@ from vgi.table_function import BindParams
 from .buffering import DrainState, SinkBuffer, input_schema_of
 from .models import _ESTIMATORS, _FIT_SCHEMA, _fit_and_emit
 from .registry import validate_name
-from .schema_utils import columns_md
+from .schema_utils import result_columns_schema
 
 _UNSET: Any = object()
 
 # All typed fit_lgbm_<task> functions share the generic fit result schema.
-_FIT_COLUMNS_MD = columns_md(_FIT_SCHEMA)
+_FIT_COLUMNS_SCHEMA = result_columns_schema(_FIT_SCHEMA)
 
 
 class _HP:
     """One typed hyperparameter exposed as a SQL named argument."""
 
-    __slots__ = ("name", "type", "default", "doc", "none_if", "map_value")
+    __slots__ = ("name", "type", "default", "doc", "none_if", "map_value", "choices")
 
     def __init__(
         self,
@@ -57,6 +57,7 @@ class _HP:
         *,
         none_if: Any = _UNSET,
         map_value: Any = None,
+        choices: list[Any] | None = None,
     ) -> None:
         self.name = name
         self.type = type
@@ -64,6 +65,9 @@ class _HP:
         self.doc = doc
         self.none_if = none_if  # if the SQL value equals this, pass None to LightGBM
         self.map_value = map_value  # optional callable: SQL value -> LightGBM value
+        # Machine-readable allowed values, surfaced to callers/agents through the
+        # catalog rather than only being spelled out in `doc` (VGI317).
+        self.choices = choices
 
 
 # Common, high-value LightGBM hyperparameters shared by both tasks. The only
@@ -79,7 +83,13 @@ def _common(default_objective: str) -> list[_HP]:
         _HP("colsample_bytree", float, 1.0, "Column subsampling fraction per tree."),
         _HP("reg_alpha", float, 0.0, "L1 regularization."),
         _HP("reg_lambda", float, 0.0, "L2 regularization."),
-        _HP("boosting_type", str, "gbdt", "Boosting algorithm: gbdt, dart, or goss."),
+        _HP(
+            "boosting_type",
+            str,
+            "gbdt",
+            "Boosting algorithm.",
+            choices=["gbdt", "dart", "goss"],
+        ),
         _HP("objective", str, default_objective, "LightGBM objective; '' keeps the task default.", none_if=""),
         _HP("random_state", int, 0, "Random seed."),
     ]
@@ -116,8 +126,8 @@ def _typed_doc_tags(est_name: str) -> dict[str, str]:
         f"type-checked in the catalog instead of a JSON `params` blob. Name the {task} label with "
         f"`target :=`, optionally carry an `id :=` through; every other column is a feature (string "
         f"columns become LightGBM native categoricals and missing values flow through). Returns the same "
-        f"one-row summary with a reusable `model` BLOB, and persists to the registry when `model_name :=` "
-        f"is given. Feed the BLOB to `predict`/`explain`/`feature_importance`. Sentinel: `max_depth := 0` "
+        f"one-row summary with a reusable `model` `BLOB`, and persists to the registry when `model_name :=` "
+        f"is given. Feed the `BLOB` to `predict`/`explain`/`feature_importance`. Sentinel: `max_depth := 0` "
         f"means unlimited."
     )
     doc_md = (
@@ -126,12 +136,12 @@ def _typed_doc_tags(est_name: str) -> dict[str, str]:
         f"passthrough\n"
         f"- Hyperparameters are named, typed SQL args (`n_estimators`, `num_leaves`, `max_depth`, "
         f"`learning_rate`, `min_child_samples`, `reg_lambda`, ...) at LightGBM's defaults\n"
-        f"- Returns the standard fit summary plus a reusable `model` BLOB; `model_name :=` also persists "
+        f"- Returns the standard fit summary plus a reusable `model` `BLOB`; `model_name :=` also persists "
         f"it\n\n"
         f"The discoverable, type-checked alternative to `fit(estimator := '{est_name}', ...)`. "
         f"`max_depth := 0` = unlimited."
     )
-    return {"vgi.result_columns_md": _FIT_COLUMNS_MD, "vgi.doc_llm": doc_llm, "vgi.doc_md": doc_md}
+    return {"vgi.result_columns_schema": _FIT_COLUMNS_SCHEMA, "vgi.doc_llm": doc_llm, "vgi.doc_md": doc_md}
 
 
 def _estimator_kwargs(spec: list[_HP], args: Any) -> dict[str, Any]:
@@ -152,7 +162,7 @@ def _make_args_class(est_name: str, spec: list[_HP]) -> type:
             "model_name",
             Annotated[
                 str,
-                Arg("model_name", default="", doc="Optional registry name; the model is always returned as a BLOB."),
+                Arg("model_name", default="", doc="Optional registry name; the model is always returned as a `BLOB`."),
             ],
             dc_field(default=""),
         ),
@@ -165,7 +175,11 @@ def _make_args_class(est_name: str, spec: list[_HP]) -> type:
     ]
     for hp in spec:
         fields.append(
-            (hp.name, Annotated[hp.type, Arg(hp.name, default=hp.default, doc=hp.doc)], dc_field(default=hp.default))
+            (
+                hp.name,
+                Annotated[hp.type, Arg(hp.name, default=hp.default, doc=hp.doc, choices=hp.choices)],
+                dc_field(default=hp.default),
+            )
         )
     cls_name = "Fit" + "".join(p.title() for p in est_name.split("_")) + "Args"
     return make_dataclass(cls_name, fields, frozen=True, slots=True)
@@ -234,7 +248,7 @@ def _make_fit_function(est_name: str) -> type:
             "examples": [
                 FunctionExample(
                     sql=(
-                        f"SELECT model_name, task FROM lightgbm.{fn_name}((SELECT * FROM lightgbm.iris()), "
+                        f"SELECT model_name, task FROM lightgbm.main.{fn_name}((SELECT * FROM lightgbm.main.iris()), "
                         f"model_name := 'm', target := 'target', id := 'sample_id'"
                         + (f", {param_hint}" if param_hint else "")
                         + ")"

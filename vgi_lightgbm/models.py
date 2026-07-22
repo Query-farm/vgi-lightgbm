@@ -7,7 +7,7 @@
   registry (``model_name :=``) *or* passed inline as a BLOB (``model :=``).
 * ``cross_val_predict`` -- buffering: out-of-fold predictions, no persistence.
 * ``cross_val_score``   -- buffering: per-fold scores, no persistence.
-* ``list_models`` / ``model_info`` / ``drop_model`` -- registry management.
+* ``models`` / ``model_info`` / ``drop_model`` -- registry management.
 
 Column roles follow the project convention: name the ``target`` column (for
 fit / cross-val) and optionally an ``id`` column to carry through; every other
@@ -17,9 +17,9 @@ strength). NULLs are preserved as missing values, which LightGBM handles
 natively. Hyperparameters are passed as a JSON string (the typed
 ``fit_lgbm_*`` functions expose the common ones as named args).
 
-    SELECT * FROM lightgbm.fit((SELECT * FROM training), model_name := 'iris_clf',
+    SELECT * FROM lightgbm.main.fit((SELECT * FROM training), model_name := 'iris_clf',
                                estimator := 'lgbm_classifier', target := 'species', id := 'id');
-    SELECT * FROM lightgbm.predict((SELECT * FROM new_data), model_name := 'iris_clf', id := 'id');
+    SELECT * FROM lightgbm.main.predict((SELECT * FROM new_data), model_name := 'iris_clf', id := 'id');
 """
 
 from __future__ import annotations
@@ -70,8 +70,8 @@ from .registry import (
     unpack_model,
     validate_name,
 )
-from .schema_utils import columns_md, columns_md_rows
 from .schema_utils import field as sfield
+from .schema_utils import result_columns_schema, result_dynamic_columns_md
 
 CLASSIFICATION = "classification"
 REGRESSION = "regression"
@@ -200,7 +200,7 @@ _FIT_SCHEMA = pa.schema(
         sfield("n_categorical", pa.int64(), "Number of categorical (string) features.", nullable=False),
         sfield("train_score", pa.float64(), "In-sample score (accuracy or R^2)."),
         sfield("features", pa.list_(pa.string()), "Ordered feature column names.", nullable=False),
-        sfield("model", pa.large_binary(), "The fitted model as a portable BLOB.", nullable=False),
+        sfield("model", pa.large_binary(), "The fitted model as a portable `BLOB`.", nullable=False),
     ]
 )
 
@@ -219,7 +219,7 @@ def _fit_and_emit(
     id_col: str,
     params_dict: dict[str, Any],
 ) -> None:
-    """Fit ``estimator`` on the buffered table, persist if named, and emit the summary + BLOB."""
+    """Fit ``estimator`` on the buffered table, persist if named, and emit the summary + `BLOB`."""
     if table is None or table.num_rows == 0:
         raise ValueError("fit received no training rows")
 
@@ -293,7 +293,7 @@ def _fit_and_emit(
 class FitArgs:
     data: Annotated[TableInput, Arg(0, doc="Training rows: features + target [+ id].")]
     model_name: Annotated[
-        str, Arg("model_name", default="", doc="Optional registry name; the model is always returned as a BLOB.")
+        str, Arg("model_name", default="", doc="Optional registry name; the model is always returned as a `BLOB`.")
     ]
     estimator: Annotated[str, Arg("estimator", default="lgbm_classifier", doc="Estimator name.")]
     target: Annotated[str, Arg("target", default="", doc="Name of the target/label column (required).")]
@@ -306,29 +306,29 @@ class FitModel(SinkBuffer[FitArgs, DrainState]):
 
     class Meta:
         name = "fit"
-        description = "Fit a LightGBM estimator; returns the model as a BLOB and stores it when model_name is given"
+        description = "Fit a LightGBM estimator; returns the model as a `BLOB` and stores it when model_name is given"
         categories = ["models", "supervised"]
         tags = {
-            "vgi.result_columns_md": columns_md(_FIT_SCHEMA),
+            "vgi.result_columns_schema": result_columns_schema(_FIT_SCHEMA),
             "vgi.doc_llm": (
                 "Buffers a training table, fits a LightGBM estimator (`estimator :=` one of "
                 "`lgbm_classifier` or `lgbm_regressor`), and returns a one-row training summary whose "
-                "`model` column is a self-contained BLOB (booster text + metadata). Name the label column "
+                "`model` column is a self-contained `BLOB` (booster text + metadata). Name the label column "
                 "with `target :=`; every other column except an optional `id :=` passthrough becomes a "
                 "feature — string columns are used as LightGBM's native categorical features and NULLs are "
                 "kept as missing values. Hyperparameters go in a JSON `params :=` string. Pass "
                 "`model_name :=` to also persist the model to the registry; otherwise it lives only in the "
-                "returned BLOB. Feed that BLOB to `predict`/`explain`/`feature_importance` via "
+                "returned `BLOB`. Feed that `BLOB` to `predict`/`explain`/`feature_importance` via "
                 "`SET VARIABLE` + `getvariable()`."
             ),
             "vgi.doc_md": (
-                "**Fit a LightGBM model** — train and return a reusable model BLOB.\n\n"
+                "**Fit a LightGBM model** — train and return a reusable model `BLOB`.\n\n"
                 "- Input: a training table `(SELECT ...)`; name the label with `target :=`, optionally an "
                 "`id :=` passthrough\n"
                 "- `estimator :=` `lgbm_classifier` | `lgbm_regressor`; hyperparameters via JSON "
                 "`params :=`\n"
                 "- Returns one row: `estimator`, `task`, `n_samples`/`n_features`/`n_classes`/"
-                "`n_categorical`, `train_score`, `features`, and the `model` BLOB\n"
+                "`n_categorical`, `train_score`, `features`, and the `model` `BLOB`\n"
                 "- `model_name :=` also persists to the registry; string features are learned as native "
                 "categoricals and classification labels of any dtype are decoded back on predict"
             ),
@@ -336,9 +336,9 @@ class FitModel(SinkBuffer[FitArgs, DrainState]):
         examples = [
             FunctionExample(
                 sql=(
-                    "SELECT model_name, task, n_samples FROM lightgbm.fit("
+                    "SELECT model_name, task, n_samples FROM lightgbm.main.fit("
                     "(SELECT sample_id, sepal_length_cm, sepal_width_cm, petal_length_cm, petal_width_cm, target "
-                    "FROM lightgbm.iris()), model_name := 'iris_clf', "
+                    "FROM lightgbm.main.iris()), model_name := 'iris_clf', "
                     "estimator := 'lgbm_classifier', target := 'target', id := 'sample_id')"
                 ),
                 description="Train a LightGBM classifier on iris and store it as 'iris_clf'",
@@ -427,11 +427,11 @@ _VERSION_WARNED: set[bytes] = set()
 
 
 def _meta_for_predict(a: PredictArgs) -> ModelMetadata:
-    """Load just the metadata for a predict/explain request (model BLOB or name)."""
+    """Load just the metadata for a predict/explain request (model `BLOB` or name)."""
     if a.model:
         return unpack_meta(a.model)
     if not a.model_name:
-        raise ValueError("predict requires either 'model_name' or a 'model' BLOB (e.g. model_name := 'my_model')")
+        raise ValueError("predict requires either 'model_name' or a 'model' `BLOB` (e.g. model_name := 'my_model')")
     try:
         return get_store().load_meta(a.model_name)
     except ModelNotFoundError as exc:
@@ -462,25 +462,57 @@ class PredictModel(TableInOutGenerator[PredictArgs]):
         description = "Score a table through a stored model (model_name) or an inline model BLOB"
         categories = ["models", "supervised", "inference"]
         tags = {
-            "vgi.result_columns_md": columns_md_rows(
+            "vgi.result_dynamic_columns_md": result_dynamic_columns_md(
                 [
                     (
-                        "prediction",
-                        "BIGINT, VARCHAR, or DOUBLE",
-                        "Predicted class label (classification) or value (regression).",
+                        "Default — classification with integer or boolean labels",
+                        [("prediction", "BIGINT", "Predicted class label, decoded to the original label value.")],
+                    ),
+                    (
+                        "Default — classification with string labels",
+                        [("prediction", "VARCHAR", "Predicted class label, decoded to the original label value.")],
+                    ),
+                    (
+                        "Default — regression",
+                        [("prediction", "DOUBLE", "Predicted value.")],
+                    ),
+                    (
+                        "`with_proba := true` (classifiers only)",
+                        [
+                            (
+                                "proba_<label>",
+                                "DOUBLE",
+                                "Predicted probability of that class; one column per class, keyed by the "
+                                "original label.",
+                            )
+                        ],
+                    ),
+                    (
+                        "`output_margin := true`",
+                        [("margin", "DOUBLE", "Raw (pre-link) margin score from the booster.")],
+                    ),
+                    (
+                        "`pred_leaf := true`",
+                        [("leaf", "INTEGER[]", "Leaf index reached in each tree, one element per tree.")],
+                    ),
+                    (
+                        "`id := '<column>'` passthrough",
+                        [("sample_id", "INTEGER", "The named id column, carried through as the first column.")],
                     ),
                 ],
                 note=(
-                    "If an `id` column is named, it is carried through as the first column. The middle column "
-                    "varies with the prediction mode: default is `prediction` (typed from the label dtype -- "
-                    "BIGINT or VARCHAR for classification, DOUBLE for regression); `output_margin := true` emits a "
-                    "`margin` DOUBLE; `pred_leaf := true` emits a `leaf` INTEGER[] (one leaf index per tree). "
-                    "With `with_proba := true` on a classifier, one `proba_<label>` DOUBLE column is added per class."
+                    "The result shape depends on the prediction mode and on whether an `id` column is "
+                    "named. When `id :=` is given, that input column is carried through unchanged as the "
+                    "first column (the table below shows the common `sample_id` case). The prediction "
+                    "column itself is one of the mutually exclusive variants below: the default "
+                    "`prediction` (typed from the label dtype), `with_proba := true` (one "
+                    "`proba_<label>` column per class, classifiers only), `output_margin := true` "
+                    "(`margin`), or `pred_leaf := true` (`leaf`)."
                 ),
             ),
             "vgi.doc_llm": (
                 "Streams a table through an already-fit LightGBM model and emits its predictions. Identify "
-                "the model with either `model_name :=` (a registry name) or `model :=` (a BLOB from `fit`, "
+                "the model with either `model_name :=` (a registry name) or `model :=` (a `BLOB` from `fit`, "
                 "passed via `SET VARIABLE` + `getvariable()` since a table function has only one subquery "
                 "slot). Features are matched by name (order-independent; extra columns ignored; missing "
                 "ones error at bind), and string/categorical columns are re-encoded exactly as at fit. The "
@@ -491,19 +523,20 @@ class PredictModel(TableInOutGenerator[PredictArgs]):
             ),
             "vgi.doc_md": (
                 "**Predict with a stored model** — score a table row by row.\n\n"
-                "- Identify the model with `model_name :=` *or* `model :=` (a `fit` BLOB)\n"
+                "- Identify the model with `model_name :=` *or* `model :=` (a `fit` `BLOB`)\n"
                 "- Features aligned by name; an optional `id :=` is carried through\n"
                 "- Default output: `prediction` (label or value)\n"
                 "- `with_proba := true` → one `proba_<label>` column per class; `output_margin := true` → "
-                "a `margin` DOUBLE; `pred_leaf := true` → a `leaf` INTEGER[] (one index per tree) — the "
+                "a `margin` `DOUBLE`; `pred_leaf := true` → a `leaf` `INTEGER[]` (one index per tree) — the "
                 "three modes are mutually exclusive"
             ),
         }
         examples = [
             FunctionExample(
                 sql=(
-                    "SELECT * FROM lightgbm.predict((SELECT * FROM lightgbm.iris()), "
-                    "model_name := 'iris_clf', id := 'sample_id')"
+                    "SELECT sample_id, prediction FROM lightgbm.main.predict("
+                    "(SELECT * FROM lightgbm.main.iris()), model_name := 'iris_clf', id := 'sample_id') "
+                    "ORDER BY sample_id LIMIT 10"
                 ),
                 description="Predict with the stored 'iris_clf' model",
             )
@@ -647,15 +680,43 @@ class CrossValPredict(SinkBuffer[CrossValArgs, DrainState]):
         description = "Out-of-fold cross-validated predictions (no model is stored)"
         categories = ["models", "supervised", "evaluation"]
         tags = {
-            "vgi.result_columns_md": columns_md_rows(
+            "vgi.result_dynamic_columns_md": result_dynamic_columns_md(
                 [
                     (
-                        "prediction",
-                        "BIGINT, VARCHAR, or DOUBLE",
-                        "Out-of-fold predicted class label (classification) or value (regression).",
+                        "Classification with integer or boolean labels",
+                        [
+                            (
+                                "prediction",
+                                "BIGINT",
+                                "Out-of-fold predicted class label, decoded to the original label value.",
+                            )
+                        ],
+                    ),
+                    (
+                        "Classification with string labels",
+                        [
+                            (
+                                "prediction",
+                                "VARCHAR",
+                                "Out-of-fold predicted class label, decoded to the original label value.",
+                            )
+                        ],
+                    ),
+                    (
+                        "Regression",
+                        [("prediction", "DOUBLE", "Out-of-fold predicted value.")],
+                    ),
+                    (
+                        "`id := '<column>'` passthrough",
+                        [("sample_id", "INTEGER", "The named id column, carried through as the first column.")],
                     ),
                 ],
-                note="If an `id` column is named, it is carried through as the first column.",
+                note=(
+                    "One row per input row. The `prediction` column's type follows the label dtype "
+                    "(classification decodes back to the original labels; regression is `DOUBLE`), and "
+                    "naming `id :=` carries that input column through as the first column (the table "
+                    "below shows the common `sample_id` case)."
+                ),
             ),
             "vgi.doc_llm": (
                 "Computes out-of-fold cross-validated predictions for a training table without persisting "
@@ -677,11 +738,12 @@ class CrossValPredict(SinkBuffer[CrossValArgs, DrainState]):
         examples = [
             FunctionExample(
                 sql=(
-                    "SELECT * FROM lightgbm.cross_val_predict("
+                    "SELECT prediction, count(*) AS n FROM lightgbm.main.cross_val_predict("
                     "(SELECT sample_id, sepal_length_cm, sepal_width_cm, petal_length_cm, petal_width_cm, target "
-                    "FROM lightgbm.iris()), estimator := 'lgbm_classifier', target := 'target', id := 'sample_id')"
+                    "FROM lightgbm.main.iris()), estimator := 'lgbm_classifier', target := 'target') "
+                    "GROUP BY prediction ORDER BY prediction"
                 ),
-                description="5-fold out-of-fold predictions on iris",
+                description="Distribution of the 5-fold out-of-fold predictions on iris",
             )
         ]
 
@@ -702,7 +764,7 @@ class CrossValPredict(SinkBuffer[CrossValArgs, DrainState]):
         # it from the input schema (string target -> VARCHAR, else BIGINT).
         classes: list[Any] | None = None
         if task == CLASSIFICATION and pa.types.is_string(input_schema.field(a.target).type):
-            classes = [""]  # marker: string labels -> VARCHAR prediction column
+            classes = [""]  # marker: string labels -> `VARCHAR` prediction column
         fields.append(_prediction_field(task, classes))
         return BindResponse(output_schema=pa.schema(fields))
 
@@ -797,7 +859,7 @@ class CrossValScore(SinkBuffer[CrossValScoreArgs, DrainState]):
         description = "Per-fold cross-validation scores (accuracy or R^2); no model is stored"
         categories = ["models", "supervised", "evaluation"]
         tags = {
-            "vgi.result_columns_md": columns_md(_CV_SCORE_SCHEMA),
+            "vgi.result_columns_schema": result_columns_schema(_CV_SCORE_SCHEMA),
             "vgi.doc_llm": (
                 "Runs k-fold cross-validation and returns the held-out score for each fold (one `(fold, "
                 "score, metric)` row), without storing any model. Name the label with `target :=`, choose "
@@ -817,9 +879,9 @@ class CrossValScore(SinkBuffer[CrossValScoreArgs, DrainState]):
         examples = [
             FunctionExample(
                 sql=(
-                    "SELECT fold, score FROM lightgbm.cross_val_score("
+                    "SELECT fold, score FROM lightgbm.main.cross_val_score("
                     "(SELECT sample_id, sepal_length_cm, sepal_width_cm, petal_length_cm, petal_width_cm, target "
-                    "FROM lightgbm.iris()), estimator := 'lgbm_classifier', target := 'target', cv := 5)"
+                    "FROM lightgbm.main.iris()), estimator := 'lgbm_classifier', target := 'target', cv := 5)"
                 ),
                 description="5-fold accuracy scores on iris",
             )
@@ -890,7 +952,7 @@ class CrossValScore(SinkBuffer[CrossValScoreArgs, DrainState]):
 
 
 # ===========================================================================
-# Registry management: list_models / model_info / drop_model
+# Registry management: models / model_info / drop_model
 # ===========================================================================
 
 _MODEL_INFO_SCHEMA = pa.schema(
@@ -898,7 +960,7 @@ _MODEL_INFO_SCHEMA = pa.schema(
         sfield("model_name", pa.string(), "Stored model name.", nullable=False),
         sfield("estimator", pa.string(), "Estimator type.", nullable=False),
         sfield("task", pa.string(), "classification or regression.", nullable=False),
-        sfield("target", pa.string(), "Target column the model was trained on.", nullable=False),
+        sfield("target_column", pa.string(), "Name of the column the model was trained to predict.", nullable=False),
         sfield("n_features", pa.int64(), "Number of features.", nullable=False),
         sfield("n_categorical", pa.int64(), "Number of categorical features.", nullable=False),
         sfield("n_samples", pa.int64(), "Number of training rows.", nullable=False),
@@ -916,7 +978,7 @@ def _meta_rows(metas: list[ModelMetadata]) -> dict[str, list[Any]]:
         "model_name": [m.name for m in metas],
         "estimator": [m.estimator for m in metas],
         "task": [m.task for m in metas],
-        "target": [m.target for m in metas],
+        "target_column": [m.target for m in metas],
         "n_features": [m.n_features for m in metas],
         "n_categorical": [sum(m.categorical) for m in metas],
         "n_samples": [m.n_samples for m in metas],
@@ -939,11 +1001,11 @@ class ListModels(TableFunctionGenerator[NoArgs]):
     FIXED_SCHEMA: ClassVar[pa.Schema] = _MODEL_INFO_SCHEMA
 
     class Meta:
-        name = "list_models"
+        name = "models"
         description = "List all models in the registry"
         categories = ["models", "registry"]
         tags = {
-            "vgi.result_columns_md": columns_md(_MODEL_INFO_SCHEMA),
+            "vgi.result_columns_schema": result_columns_schema(_MODEL_INFO_SCHEMA),
             "vgi.doc_llm": (
                 "Zero-argument table function listing every model persisted to the registry (by `fit` / "
                 "`fit_lgbm_<task>` / search with a `model_name`). One row per model: `model_name`, "
@@ -959,7 +1021,14 @@ class ListModels(TableFunctionGenerator[NoArgs]):
                 "Takes no arguments. Use it to find models to score with `predict`."
             ),
         }
-        examples = [FunctionExample(sql="SELECT * FROM lightgbm.list_models()", description="List stored models")]
+        examples = [
+            FunctionExample(
+                sql=(
+                    "SELECT count(*) AS n_models, count(DISTINCT estimator) AS n_estimators FROM lightgbm.main.models()"
+                ),
+                description="How many models the registry holds, and how many distinct estimators",
+            )
+        ]
 
     @classmethod
     def cardinality(cls, params: BindParams[NoArgs]) -> TableCardinality:
@@ -986,7 +1055,7 @@ class ModelInfo(TableFunctionGenerator[ModelInfoArgs]):
         description = "Describe a single stored model (one row, empty if absent)"
         categories = ["models", "registry"]
         tags = {
-            "vgi.result_columns_md": columns_md(_MODEL_INFO_SCHEMA),
+            "vgi.result_columns_schema": result_columns_schema(_MODEL_INFO_SCHEMA),
             "vgi.doc_llm": (
                 "Returns the registry metadata for one model named positionally (`model_info('my_model')`): "
                 "a single row with `model_name`, `estimator`, `task`, `target`, training shape "
@@ -1005,7 +1074,8 @@ class ModelInfo(TableFunctionGenerator[ModelInfoArgs]):
         }
         examples = [
             FunctionExample(
-                sql="SELECT * FROM lightgbm.model_info('iris_clf')", description="Show one model's metadata"
+                sql=("SELECT count(*) AS found FROM lightgbm.main.model_info('iris_clf')"),
+                description="Check whether a model named 'iris_clf' is in the registry",
             )
         ]
 
@@ -1046,7 +1116,7 @@ class DropModel(TableFunctionGenerator[DropModelArgs]):
         description = "Delete a model from the registry"
         categories = ["models", "registry"]
         tags = {
-            "vgi.result_columns_md": columns_md(_DROP_SCHEMA),
+            "vgi.result_columns_schema": result_columns_schema(_DROP_SCHEMA),
             "vgi.doc_llm": (
                 "Deletes a model from the registry by name (`drop_model('my_model')`) and returns one row "
                 "`(model_name, dropped)` where `dropped` is true when a model was removed and false when "
@@ -1061,7 +1131,10 @@ class DropModel(TableFunctionGenerator[DropModelArgs]):
             ),
         }
         examples = [
-            FunctionExample(sql="SELECT * FROM lightgbm.drop_model('iris_clf')", description="Delete a stored model")
+            FunctionExample(
+                sql="SELECT model_name, dropped FROM lightgbm.main.drop_model('no_such_model')",
+                description="Delete a model by name; `dropped` is false when the name did not exist",
+            )
         ]
 
     @classmethod

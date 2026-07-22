@@ -40,7 +40,7 @@ Each piece is mapped to the VGI primitive that fits its data flow:
 | **Typed fit** | `lightgbm.fit_lgbm_classifier((SELECT ...), num_leaves := 63, ...)` | table-buffering |
 | **Predict** | `lightgbm.predict((SELECT ...), model_name := 'm')` | streaming table-in-out |
 | **Cross-val** | `lightgbm.cross_val_predict(...)` / `lightgbm.cross_val_score(...)` | table-buffering |
-| **Search** | `lightgbm.grid_search((SELECT ...), estimator := union_value(...))` | table-buffering |
+| **Search** | `lightgbm.grid_search((SELECT ...), estimator := 'lgbm_classifier', num_leaves := [15, 31])` | table-buffering |
 | **Importance** | `lightgbm.feature_importance('m')` / `lightgbm.permutation_importance(...)` | table function / buffering |
 | **Explain (SHAP)** | `lightgbm.explain((SELECT ...), model_name := 'm')` | streaming table-in-out |
 | **Inspect** | `lightgbm.partial_dependence((SELECT ...), feature := 'x')` | table-buffering |
@@ -85,7 +85,7 @@ table), pass a BLOB through a session variable:
 ```sql
 -- fit without persisting; capture the BLOB
 SET VARIABLE m = (SELECT model FROM lightgbm.fit(
-  (SELECT * FROM lightgbm.diabetes()), estimator := 'lgbm_regressor', target := 'target', id := 'sample_id'));
+  (SELECT * FROM lightgbm.diabetes()), estimator := 'lgbm_regressor', target := 'progression', id := 'sample_id'));
 
 -- predict with the inline model
 SELECT * FROM lightgbm.predict(
@@ -107,7 +107,7 @@ SELECT * FROM lightgbm.make_classification(n_samples := 500, n_features := 8, n_
 
 ### Models (registry-backed)
 `fit`, `fit_lgbm_classifier`, `fit_lgbm_regressor`, `predict`, `cross_val_predict`,
-`cross_val_score`, `grid_search`, `randomized_search`, `list_models`, `model_info`,
+`cross_val_score`, `grid_search`, `randomized_search`, `models`, `model_info`,
 `drop_model`.
 
 Estimators: `lgbm_classifier`, `lgbm_regressor`.
@@ -145,18 +145,18 @@ SELECT fold, score FROM lightgbm.cross_val_score(
 -- the params you list are searched; the rest stay at their defaults.
 SELECT params, mean_score, rank FROM lightgbm.grid_search(
   (SELECT sample_id, sepal_length_cm, sepal_width_cm, petal_length_cm, petal_width_cm, target FROM lightgbm.iris()),
-  target := 'target', id := 'sample_id',
-  estimator := union_value(lgbm_classifier := {'num_leaves': [15, 31, 63], 'learning_rate': [0.05, 0.1]}), cv := 4)
+  target := 'target', id := 'sample_id', estimator := 'lgbm_classifier',
+  num_leaves := [15, 31, 63], learning_rate := [0.05, 0.1], cv := 4)
 ORDER BY rank;
 
 -- randomized search: sample n_iter combinations (capped at the grid size)
 SELECT params, mean_score, rank FROM lightgbm.randomized_search(
   (SELECT sample_id, sepal_length_cm, sepal_width_cm, petal_length_cm, petal_width_cm, target FROM lightgbm.iris()),
-  target := 'target', id := 'sample_id', n_iter := 6,
-  estimator := union_value(lgbm_classifier := {'num_leaves': [7, 15, 31, 63], 'learning_rate': [0.03, 0.05, 0.1]}))
+  target := 'target', id := 'sample_id', n_iter := 6, search_seed := 42,
+  estimator := 'lgbm_classifier', num_leaves := [7, 15, 31, 63], learning_rate := [0.03, 0.05, 0.1])
 ORDER BY rank;
 
-SELECT * FROM lightgbm.list_models();
+SELECT * FROM lightgbm.main.models();
 SELECT * FROM lightgbm.drop_model('iris_clf');
 ```
 

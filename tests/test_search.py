@@ -1,56 +1,68 @@
-"""Unit tests for the discriminated-union grid/randomized search helpers."""
+"""Unit tests for the grid/randomized search helpers."""
 
 from __future__ import annotations
 
 import pyarrow as pa
 
 from vgi_lightgbm.search import (
-    _GRID_UNION,
     SEARCH_FUNCTIONS,
+    GridSearchArgs,
+    RandomizedSearchArgs,
     _combos,
     _grid_size,
-    _member_struct,
     _param_grid,
+    _search_param_fields,
     _select_combos,
 )
 from vgi_lightgbm.typed_models import _HPARAMS
 
 
-class TestGridUnion:
-    def test_one_member_per_estimator(self) -> None:
-        members = {f.name for f in _GRID_UNION}
-        assert members == set(_HPARAMS)
+class _Args:
+    """Stand-in for the generated args dataclass: attributes are value lists."""
 
-    def test_member_fields_match_hparams(self) -> None:
-        for spec in _HPARAMS.values():
-            struct = _member_struct(spec)
-            assert [f.name for f in struct] == [hp.name for hp in spec]
+    def __init__(self, **kw: object) -> None:
+        self.__dict__.update(kw)
 
-    def test_member_field_types_are_lists_of_scalar(self) -> None:
-        spec = _HPARAMS["lgbm_classifier"]
-        struct = _member_struct(spec)
-        by_name = {f.name: f.type for f in struct}
-        # num_leaves is int -> list<int64>; learning_rate is float -> list<double>
-        assert by_name["num_leaves"] == pa.list_(pa.int64())
-        assert by_name["learning_rate"] == pa.list_(pa.float64())
-        assert by_name["boosting_type"] == pa.list_(pa.string())
+
+class TestSearchParamArguments:
+    def test_one_argument_per_hyperparameter(self) -> None:
+        names = [name for name, _type, _default in _search_param_fields()]
+        assert set(names) == {hp.name for spec in _HPARAMS.values() for hp in spec}
+
+    def test_each_argument_is_a_list_of_its_scalar_type(self) -> None:
+        by_name = {name: annotated for name, annotated, _default in _search_param_fields()}
+
+        # The Arg metadata carries the explicit Arrow type for the list argument.
+        def arrow_of(name: str) -> pa.DataType:
+            return by_name[name].__metadata__[0].arrow_type
+
+        assert arrow_of("num_leaves") == pa.list_(pa.int64())
+        assert arrow_of("learning_rate") == pa.list_(pa.float64())
+        assert arrow_of("boosting_type") == pa.list_(pa.string())
+
+    def test_estimator_is_a_plain_string_on_both_functions(self) -> None:
+        for cls in (GridSearchArgs, RandomizedSearchArgs):
+            annotated = cls.__annotations__["estimator"]
+            assert annotated.__origin__ is str
+            assert annotated.__metadata__[0].choices == sorted(_HPARAMS)
 
 
 class TestParamGrid:
     def test_only_set_params_searched(self) -> None:
-        grid = _param_grid("lgbm_classifier", {"num_leaves": [15, 31]})
+        grid = _param_grid("lgbm_classifier", _Args(num_leaves=[15, 31]))
         assert grid == {"num_leaves": [15, 31]}
 
     def test_max_depth_zero_maps_to_unlimited(self) -> None:
-        grid = _param_grid("lgbm_classifier", {"max_depth": [0, 3, 5]})
+        grid = _param_grid("lgbm_classifier", _Args(max_depth=[0, 3, 5]))
         assert grid == {"max_depth": [-1, 3, 5]}
 
     def test_empty_objective_maps_to_none(self) -> None:
-        grid = _param_grid("lgbm_classifier", {"objective": ["", "multiclass"]})
+        grid = _param_grid("lgbm_classifier", _Args(objective=["", "multiclass"]))
         assert grid == {"objective": [None, "multiclass"]}
 
-    def test_null_member_value_yields_empty_grid(self) -> None:
-        assert _param_grid("lgbm_classifier", None) == {}
+    def test_no_values_yields_empty_grid(self) -> None:
+        assert _param_grid("lgbm_classifier", _Args()) == {}
+        assert _param_grid("lgbm_classifier", _Args(num_leaves=[])) == {}
 
 
 class TestGridSize:

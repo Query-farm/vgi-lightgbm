@@ -103,20 +103,23 @@ instead take a typed **discriminated-union** estimator arg (see below), not JSON
   feature count (LightGBM never one-hot-expands, so there's no width blow-up — that's
   the whole point). Numeric NULLs are kept as NaN (LightGBM handles missing values
   natively).
-- **`search.grid_search` / `randomized_search` are a discriminated union** (same
-  design as vgi-sklearn's `search.py`). The `estimator` arg is a sparse Arrow union
-  `_GRID_UNION` (one member per estimator built from `_HPARAMS`, each field a
-  `list<scalar>`); SQL calls it `union_value(<estimator> := {param: [values]})`.
-  The worker reads it as a `vgi.TaggedUnion` (`.tag` = estimator, `.value` = grid
-  dict); `_param_grid` translates a member into a param grid, applying the same
-  per-param mapping as typed fit element-wise (`max_depth` 0→-1, `objective` ""→
-  default); omitted params stay at default. Returns the CV leaderboard (one row per
-  combo, ranked) with the refit best model BLOB on the single best row — grab it
-  with `WHERE model IS NOT NULL`. `randomized_search` adds `n_iter` (sampled,
-  capped at the grid size via `_select_combos`) + `random_state`. **Requires
-  `vgi-python >=0.8.3`** (ships `vgi.TaggedUnion` / union-tag-preserving decode) —
-  already the pin. Dense unions are unsupported by the C++ extension; `union_value`
-  produces sparse, which works.
+- **`search.grid_search` / `randomized_search` take flat, typed list arguments.**
+  `estimator := 'lgbm_classifier'` is the same VARCHAR argument `fit`/`cross_val_*`
+  use (with machine-readable `choices`), and the grid is one list-valued named
+  argument per hyperparameter, generated from `_HPARAMS` by `_search_param_fields`
+  (`num_leaves := [15, 31]`, `learning_rate := [0.05, 0.1]`). `_param_grid` reads
+  them off the args object, applying the same per-param mapping as typed fit
+  element-wise (`max_depth` 0→-1, `objective` ""→default); an omitted/empty list
+  stays at the estimator default. Returns the CV leaderboard (one row per combo,
+  ranked) with the refit best model BLOB on the single best row — grab it with
+  `WHERE model IS NOT NULL`. `randomized_search` adds `n_iter` (sampled, capped at
+  the grid size via `_select_combos`) + `search_seed` (named so it does not collide
+  with the searchable `random_state` hyperparameter). This replaced an earlier
+  `union_value(<estimator> := {param: [values]})` tagged-union argument: a
+  `UNION(STRUCT(... LIST))` reads as a table-in-a-scalar (vgi-lint VGI316) and made
+  `estimator` a second type for the same argument name (VGI315). The args
+  dataclasses are built with `dataclasses.make_dataclass`, so mypy gets a
+  `TYPE_CHECKING` stand-in class rather than following the generated type.
 - **`feature_importance` and `permutation_importance` are ranked** (a `rank` int32
   column, sorted by importance desc). `partial_dependence` (`importance.py`,
   buffering) shows how a feature moves the prediction over a grid: numeric-only
