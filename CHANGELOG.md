@@ -6,6 +6,15 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+- **Ported to VGI protocol 3.2** (`vgi-python` 0.30.0 -> 0.50.0, `vgi-rpc`
+  0.44.1 -> 0.53.1) so the worker attaches with the current community `vgi`
+  extension on haybarn 2.0. Table keys are now declared as canonical vgi.v3
+  constraint records.
+- Agent-task grader SQL moved out of the published `vgi.agent_test_tasks` tag
+  into `vgi-agent-tests.yaml`, so the worker passes `vgi-lint-check` 2.x
+  (haybarn 2.0 / vgi.v3).
+
 ### Fixed
 - **The worker could no longer be attached.** `vgi-python` 0.8.5 predates the
   `attach_catalogs` field the current community `vgi` extension requires, so

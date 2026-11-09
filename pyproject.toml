@@ -9,8 +9,8 @@ description = "A VGI worker exposing LightGBM (train/predict registry + interpre
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "vgi-python[http,oauth]>=0.30.0",
-    "vgi-rpc[sentry]>=0.44.1",
+    "vgi-python[http,oauth]>=0.50.0",
+    "vgi-rpc[sentry]>=0.53.1",
     "lightgbm>=4.0",
     "scikit-learn>=1.5",
     "numpy",
@@ -49,3 +49,8 @@ files = ["vgi_lightgbm", "lightgbm_worker.py", "serve.py"]
 "lightgbm.main.feature_importance" = { ignore = [{ code = "VGI901", kind = "domain-exemption", reason = "VGI901/902 (--execute only) run each example's SQL live. These functions read a *stored* model at bind time, so their single-statement illustrative examples cannot bind in a fresh session (no model exists yet) — the fit->predict workflow is demonstrated in the catalog's vgi.executable_examples in..." }, { code = "VGI902", kind = "domain-exemption", reason = "VGI901/902 (--execute only) run each example's SQL live. These functions read a *stored* model at bind time, so their single-statement illustrative examples cannot bind in a fresh session (no model exists yet) — the fit->predict workflow is demonstrated in the catalog's vgi.executable_examples in..." }] }
 "lightgbm.main.permutation_importance" = { ignore = [{ code = "VGI901", kind = "domain-exemption", reason = "VGI901/902 (--execute only) run each example's SQL live. These functions read a *stored* model at bind time, so their single-statement illustrative examples cannot bind in a fresh session (no model exists yet) — the fit->predict workflow is demonstrated in the catalog's vgi.executable_examples in..." }, { code = "VGI902", kind = "domain-exemption", reason = "VGI901/902 (--execute only) run each example's SQL live. These functions read a *stored* model at bind time, so their single-statement illustrative examples cannot bind in a fresh session (no model exists yet) — the fit->predict workflow is demonstrated in the catalog's vgi.executable_examples in..." }] }
 "lightgbm.main.partial_dependence" = { ignore = [{ code = "VGI901", kind = "domain-exemption", reason = "VGI901/902 (--execute only) run each example's SQL live. These functions read a *stored* model at bind time, so their single-statement illustrative examples cannot bind in a fresh session (no model exists yet) — the fit->predict workflow is demonstrated in the catalog's vgi.executable_examples in..." }, { code = "VGI902", kind = "domain-exemption", reason = "VGI901/902 (--execute only) run each example's SQL live. These functions read a *stored* model at bind time, so their single-statement illustrative examples cannot bind in a fresh session (no model exists yet) — the fit->predict workflow is demonstrated in the catalog's vgi.executable_examples in..." }] }
+# VGI417: breast_cancer returns 33 columns (30 cell-nucleus features), so its
+# vgi.result_columns_schema (one documented entry per column) is ~5.4k characters,
+# over the 4k agent-context guideline. Every entry carries a needed column
+# definition; trimming them would drop documentation rather than add clarity.
+"lightgbm.main.breast_cancer" = { ignore = [{ code = "VGI417", kind = "domain-exemption", reason = "breast_cancer returns 33 columns (30 cell-nucleus features); its vgi.result_columns_schema documents every column and is necessarily over the 4k agent-context guideline." }] }

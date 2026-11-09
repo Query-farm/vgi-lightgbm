@@ -1,8 +1,8 @@
 # /// script
 # requires-python = ">=3.13"
 # dependencies = [
-#     "vgi-python[http,oauth]>=0.17.0",
-#     "vgi-rpc[sentry]>=0.26.1",
+#     "vgi-python[http,oauth]>=0.50.0",
+#     "vgi-rpc[sentry]>=0.53.1",
 #     "lightgbm>=4.0",
 #     "scikit-learn>=1.5",
 #     "numpy",
@@ -30,7 +30,7 @@ import os
 from typing import Any
 
 from vgi import Worker
-from vgi.catalog import Catalog, ReadOnlyCatalogInterface, Schema, Table
+from vgi.catalog import Catalog, ReadOnlyCatalogInterface, Schema, Table, constraint_record
 from vgi.catalog.catalog_interface import CatalogAttachResult, CatalogInfo
 
 from vgi_lightgbm import __version__
@@ -148,279 +148,157 @@ _CATALOG_EXECUTABLE_EXAMPLES = json.dumps(
     ]
 )
 # The fixed agent-suitability suite (VGI152 / `vgi-lint simulate`). Each task is a
-# question an analyst would actually ask; `reference_sql` is the canonical answer
-# and is **grader-only** — it is never shown to the analyst, whose only input is
-# `prompt`. Between them the tasks call every function the worker exposes, so a
-# low score points at missing metadata rather than a missing test.
+# question an analyst would actually ask; only `name` and `prompt` are published.
+# The grader-only `reference_sql`/`check_sql` live in vgi-agent-tests.yaml (VGI416),
+# which vgi-lint discovers beside pyproject.toml. Between them the tasks call every
+# function the worker exposes, so a low score points at missing metadata rather
+# than a missing test.
 _CATALOG_AGENT_TEST_TASKS = json.dumps(
     [
         {
             "name": "iris_species_balance",
             "prompt": (
-                "How many flowers of each species are in the built-in iris dataset? Return one "
-                "row per species with columns named target_name and n, ordered by target_name."
-            ),
-            "reference_sql": (
-                "SELECT target_name, count(*) AS n FROM lightgbm.main.iris GROUP BY target_name ORDER BY target_name"
+                "How many flowers of each species are in the built-in iris dataset? Return one row per species with"
+                " columns named target_name and n, ordered by target_name."
             ),
         },
         {
             "name": "wine_sample_count",
             "prompt": (
-                "How many wine samples are in the built-in wine-recognition dataset? Return a "
-                "single row with one column named n."
+                "How many wine samples are in the built-in wine-recognition dataset? Return a single row with one "
+                "column named n."
             ),
-            "reference_sql": "SELECT count(*) AS n FROM lightgbm.main.wine",
         },
         {
             "name": "breast_cancer_cv_accuracy",
             "prompt": (
-                "Before trusting a tumour-screening model I need an honest out-of-sample number. "
-                "Using the built-in Wisconsin breast-cancer data and all 30 cell-nucleus "
-                "features, run 5-fold cross-validation with a LightGBM classifier and report the "
-                "mean held-out accuracy. Round to 4 decimals and return a single row with one "
-                "column named mean_cv_accuracy."
-            ),
-            "reference_sql": (
-                "SELECT round(avg(score), 4) AS mean_cv_accuracy FROM lightgbm.main.cross_val_score("
-                "(SELECT * EXCLUDE (sample_id, target_name) FROM lightgbm.main.breast_cancer), "
-                "estimator := 'lgbm_classifier', target := 'target', cv := 5)"
+                "Before trusting a tumour-screening model I need an honest out-of-sample number. Using the built-in"
+                " Wisconsin breast-cancer data and all 30 cell-nucleus features, run 5-fold cross-validation with a"
+                " LightGBM classifier and report the mean held-out accuracy. Round to 4 decimals and return a "
+                "single row with one column named mean_cv_accuracy."
             ),
         },
         {
             "name": "california_housing_priciest_latitude",
             "prompt": (
-                "In the built-in California housing data, which one-degree latitude band (round "
-                "the latitude to the nearest whole degree) has the highest average median house "
-                "value? Return a single row with one column named lat."
-            ),
-            "reference_sql": (
-                "SELECT round(latitude) AS lat FROM lightgbm.main.california_housing "
-                "GROUP BY lat ORDER BY avg(median_house_value) DESC, lat LIMIT 1"
+                "In the built-in California housing data, which one-degree latitude band (round the latitude to the"
+                " nearest whole degree) has the highest average median house value? Return a single row with one "
+                "column named lat."
             ),
         },
         {
             "name": "diabetes_train_rmse",
             "prompt": (
-                "Fit a LightGBM regressor on the diabetes dataset to predict the one-year "
-                "progression score from the baseline measurements, then score those same rows "
-                "with the fitted model and report the root-mean-squared error between the "
-                "predictions and the actual scores. Round to 2 decimals and return a single row "
-                "with one column named train_rmse."
+                "Fit a LightGBM regressor on the diabetes dataset to predict the one-year progression score from "
+                "the baseline measurements, then score those same rows with the fitted model and report the root-"
+                "mean-squared error between the predictions and the actual scores. Round to 2 decimals and return a"
+                " single row with one column named train_rmse."
             ),
-            "reference_sql": [
-                "SET VARIABLE diab_model = (SELECT model FROM lightgbm.main.fit("
-                "(SELECT * FROM lightgbm.main.diabetes), estimator := 'lgbm_regressor', "
-                "target := 'progression', id := 'sample_id'))",
-                "SELECT round(sqrt(avg((p.prediction - d.progression) * (p.prediction - d.progression))), 2) "
-                "AS train_rmse FROM lightgbm.main.predict((SELECT * FROM lightgbm.main.diabetes), "
-                "model := getvariable('diab_model'), id := 'sample_id') p "
-                "JOIN lightgbm.main.diabetes d USING (sample_id)",
-            ],
         },
         {
             "name": "iris_oof_accuracy",
             "prompt": (
-                "I want a leakage-free accuracy for a LightGBM classifier on iris: predict every "
-                "row from a model trained on the other folds (5 folds), then compare those "
-                "out-of-fold predictions with the true labels. Round to 4 decimals and return a "
-                "single row with one column named oof_accuracy."
-            ),
-            "reference_sql": (
-                "SELECT round(avg((p.prediction = i.target)::INT), 4) AS oof_accuracy "
-                "FROM lightgbm.main.cross_val_predict((SELECT * EXCLUDE (target_name) FROM lightgbm.main.iris), "
-                "estimator := 'lgbm_classifier', target := 'target', id := 'sample_id', cv := 5) p "
-                "JOIN lightgbm.main.iris i USING (sample_id)"
+                "I want a leakage-free accuracy for a LightGBM classifier on iris: predict every row from a model "
+                "trained on the other folds (5 folds), then compare those out-of-fold predictions with the true "
+                "labels. Round to 4 decimals and return a single row with one column named oof_accuracy."
             ),
         },
         {
             "name": "iris_grid_search_best_accuracy",
             "prompt": (
-                "I'm tuning a LightGBM classifier on iris. Sweep num_leaves over 7, 15 and 31 and "
-                "learning_rate over 0.05 and 0.1 with 5-fold cross-validation, and report the "
-                "best mean cross-validated accuracy across all those combinations. Round to 4 "
-                "decimals and return a single row with one column named best_cv_accuracy."
-            ),
-            "reference_sql": (
-                "SELECT round(max(mean_score), 4) AS best_cv_accuracy FROM lightgbm.main.grid_search("
-                "(SELECT * EXCLUDE (target_name) FROM lightgbm.main.iris), target := 'target', "
-                "id := 'sample_id', cv := 5, estimator := 'lgbm_classifier', "
-                "num_leaves := [7, 15, 31], learning_rate := [0.05, 0.1])"
+                "I'm tuning a LightGBM classifier on iris. Sweep num_leaves over 7, 15 and 31 and learning_rate "
+                "over 0.05 and 0.1 with 5-fold cross-validation, and report the best mean cross-validated accuracy "
+                "across all those combinations. Round to 4 decimals and return a single row with one column named "
+                "best_cv_accuracy."
             ),
         },
         {
             "name": "iris_randomized_search_combos",
             "prompt": (
-                "The full grid is too big to sweep, so sample it instead: on iris, try 4 randomly "
-                "chosen combinations of num_leaves (7, 15, 31, 63) and learning_rate (0.03, 0.05, "
-                "0.1, 0.2) with 3-fold cross-validation, using 42 as the sampling seed. How many "
-                "combinations end up on the leaderboard? Return a single row with one column "
-                "named n_combos."
-            ),
-            "reference_sql": (
-                "SELECT count(*) AS n_combos FROM lightgbm.main.randomized_search("
-                "(SELECT * EXCLUDE (target_name) FROM lightgbm.main.iris), target := 'target', "
-                "id := 'sample_id', cv := 3, n_iter := 4, search_seed := 42, "
-                "estimator := 'lgbm_classifier', num_leaves := [7, 15, 31, 63], "
-                "learning_rate := [0.03, 0.05, 0.1, 0.2])"
+                "The full grid is too big to sweep, so sample it instead: on iris, try 4 randomly chosen "
+                "combinations of num_leaves (7, 15, 31, 63) and learning_rate (0.03, 0.05, 0.1, 0.2) with 3-fold "
+                "cross-validation, using 42 as the sampling seed. How many combinations end up on the leaderboard? "
+                "Return a single row with one column named n_combos."
             ),
         },
         {
             "name": "fit_lgbm_classifier_summary",
             "prompt": (
-                "Using the typed classifier fitter (the one that takes hyperparameters as named "
-                "SQL arguments rather than JSON), train a LightGBM classifier on iris with "
-                "target column 'target' and id column 'sample_id', and report the training "
-                "summary's sample and feature counts. Return one row with columns named "
-                "n_samples and n_features."
-            ),
-            "reference_sql": (
-                "SELECT n_samples, n_features FROM lightgbm.main.fit_lgbm_classifier("
-                "(SELECT * EXCLUDE (target_name) FROM lightgbm.main.iris), target := 'target', "
-                "id := 'sample_id')"
+                "Using the typed classifier fitter (the one that takes hyperparameters as named SQL arguments "
+                "rather than JSON), train a LightGBM classifier on iris with target column 'target' and id column "
+                "'sample_id', and report the training summary's sample and feature counts. Return one row with "
+                "columns named n_samples and n_features."
             ),
         },
         {
             "name": "fit_lgbm_regressor_summary",
             "prompt": (
-                "Using the typed regressor fitter, train a LightGBM regressor on the diabetes "
-                "dataset (target column 'progression', id column 'sample_id') with 50 boosting "
-                "rounds, and report the training summary's sample and feature counts. Return one "
-                "row with columns named n_samples and n_features."
-            ),
-            "reference_sql": (
-                "SELECT n_samples, n_features FROM lightgbm.main.fit_lgbm_regressor("
-                "(SELECT * FROM lightgbm.main.diabetes), target := 'progression', "
-                "id := 'sample_id', n_estimators := 50)"
+                "Using the typed regressor fitter, train a LightGBM regressor on the diabetes dataset (target "
+                "column 'progression', id column 'sample_id') with 50 boosting rounds, and report the training "
+                "summary's sample and feature counts. Return one row with columns named n_samples and n_features."
             ),
         },
         {
             "name": "diabetes_top_gain_feature",
             "prompt": (
-                "Fit a LightGBM regressor on the diabetes dataset and tell me which single "
-                "baseline measurement the booster relies on most, measured by total split gain. "
-                "Return one row with a column named feature."
+                "Fit a LightGBM regressor on the diabetes dataset and tell me which single baseline measurement the"
+                " booster relies on most, measured by total split gain. Return one row with a column named feature."
             ),
-            "reference_sql": [
-                "SET VARIABLE gain_model = (SELECT model FROM lightgbm.main.fit("
-                "(SELECT * FROM lightgbm.main.diabetes), estimator := 'lgbm_regressor', "
-                "target := 'progression', id := 'sample_id'))",
-                "SELECT feature FROM lightgbm.main.feature_importance('', "
-                "model := getvariable('gain_model'), importance_type := 'gain') "
-                "ORDER BY rank, feature LIMIT 1",
-            ],
         },
         {
             "name": "diabetes_top_shap_feature",
             "prompt": (
-                "Fit a LightGBM regressor on the diabetes dataset, then use per-row SHAP "
-                "contributions to find the feature with the largest mean absolute contribution "
-                "across all rows. Return one row with a column named feature."
+                "Fit a LightGBM regressor on the diabetes dataset, then use per-row SHAP contributions to find the "
+                "feature with the largest mean absolute contribution across all rows. Return one row with a column "
+                "named feature."
             ),
-            "reference_sql": [
-                "SET VARIABLE shap_model = (SELECT model FROM lightgbm.main.fit("
-                "(SELECT * FROM lightgbm.main.diabetes), estimator := 'lgbm_regressor', "
-                "target := 'progression', id := 'sample_id'))",
-                "SELECT feature FROM lightgbm.main.explain((SELECT * FROM lightgbm.main.diabetes), "
-                "model := getvariable('shap_model'), id := 'sample_id') GROUP BY feature "
-                "ORDER BY avg(abs(shap_value)) DESC, feature LIMIT 1",
-            ],
         },
         {
             "name": "diabetes_top_permutation_feature",
             "prompt": (
-                "Fit a LightGBM regressor on the diabetes dataset, then measure how much the "
-                "model's score drops when each feature's values are shuffled (5 repeats, seed "
-                "42) and report the single most important feature by that measure. Return one "
-                "row with a column named feature."
+                "Fit a LightGBM regressor on the diabetes dataset, then measure how much the model's score drops "
+                "when each feature's values are shuffled (5 repeats, seed 42) and report the single most important "
+                "feature by that measure. Return one row with a column named feature."
             ),
-            "reference_sql": [
-                "SET VARIABLE perm_model = (SELECT model FROM lightgbm.main.fit("
-                "(SELECT * FROM lightgbm.main.diabetes), estimator := 'lgbm_regressor', "
-                "target := 'progression', id := 'sample_id'))",
-                "SELECT feature FROM lightgbm.main.permutation_importance("
-                "(SELECT * FROM lightgbm.main.diabetes), model := getvariable('perm_model'), "
-                "target := 'progression', random_state := 42, n_repeats := 5) "
-                "ORDER BY rank, feature LIMIT 1",
-            ],
         },
         {
             "name": "bmi_partial_dependence_range",
             "prompt": (
-                "Fit a LightGBM regressor on the diabetes dataset, then show how the model's "
-                "average predicted progression moves as BMI varies over a 20-point grid, and "
-                "report the lowest and highest values on that curve, each rounded to 2 decimals. "
-                "Return one row with columns named min_pd and max_pd."
+                "Fit a LightGBM regressor on the diabetes dataset, then show how the model's average predicted "
+                "progression moves as BMI varies over a 20-point grid, and report the lowest and highest values on "
+                "that curve, each rounded to 2 decimals. Return one row with columns named min_pd and max_pd."
             ),
-            "reference_sql": [
-                "SET VARIABLE pd_model = (SELECT model FROM lightgbm.main.fit("
-                "(SELECT * FROM lightgbm.main.diabetes), estimator := 'lgbm_regressor', "
-                "target := 'progression', id := 'sample_id'))",
-                "SELECT round(min(partial_dependence), 2) AS min_pd, "
-                "round(max(partial_dependence), 2) AS max_pd "
-                "FROM lightgbm.main.partial_dependence((SELECT * FROM lightgbm.main.diabetes), "
-                "model := getvariable('pd_model'), feature := 'bmi', grid_resolution := 20)",
-            ],
         },
         {
             "name": "registry_roundtrip",
             "prompt": (
-                "Save a LightGBM classifier trained on iris under the name 'agent_iris_demo', "
-                "confirm the registry can tell me which estimator and task it holds for that "
-                "name, then delete it again. Return one row from the lookup with columns named "
-                "estimator and task."
+                "Save a LightGBM classifier trained on iris under the name 'agent_iris_demo', confirm the registry "
+                "can tell me which estimator and task it holds for that name, then delete it again. Return one row "
+                "from the lookup with columns named estimator and task."
             ),
-            "reference_sql": [
-                "SELECT model_name FROM lightgbm.main.fit("
-                "(SELECT * EXCLUDE (target_name) FROM lightgbm.main.iris), "
-                "model_name := 'agent_iris_demo', estimator := 'lgbm_classifier', "
-                "target := 'target', id := 'sample_id')",
-                "SELECT estimator, task FROM lightgbm.main.model_info('agent_iris_demo')",
-            ],
-            "check_sql": ("SELECT count(*) = 1 FROM lightgbm.main.models WHERE model_name = 'agent_iris_demo'"),
         },
         {
             "name": "registry_listing_after_drop",
             "prompt": (
-                "Train a LightGBM classifier on iris and store it as 'agent_scratch_model', then "
-                "delete that model from the registry and confirm it is gone: report how many "
-                "models in the registry are named 'agent_scratch_model' after the delete. Return "
-                "a single row with one column named remaining."
+                "Train a LightGBM classifier on iris and store it as 'agent_scratch_model', then delete that model "
+                "from the registry and confirm it is gone: report how many models in the registry are named "
+                "'agent_scratch_model' after the delete. Return a single row with one column named remaining."
             ),
-            "reference_sql": [
-                "SELECT model_name FROM lightgbm.main.fit("
-                "(SELECT * EXCLUDE (target_name) FROM lightgbm.main.iris), "
-                "model_name := 'agent_scratch_model', estimator := 'lgbm_classifier', "
-                "target := 'target', id := 'sample_id')",
-                "SELECT deleted FROM lightgbm.main.drop_model('agent_scratch_model')",
-                "SELECT count(*) AS remaining FROM lightgbm.main.models WHERE model_name = 'agent_scratch_model'",
-            ],
         },
         {
             "name": "make_classification_class_balance",
             "prompt": (
-                "Generate a synthetic classification dataset with 120 samples, 4 features, 3 "
-                "classes and random_state 42, then report how many rows fall in each class. "
-                "Return one row per class with columns named target and n, ordered by target."
-            ),
-            "reference_sql": (
-                "SELECT target, count(*) AS n FROM lightgbm.main.make_classification("
-                "n_samples := 120, n_features := 4, n_classes := 3, random_state := 42) "
-                "GROUP BY target ORDER BY target"
+                "Generate a synthetic classification dataset with 120 samples, 4 features, 3 classes and "
+                "random_state 42, then report how many rows fall in each class. Return one row per class with "
+                "columns named target and n, ordered by target."
             ),
         },
         {
             "name": "make_regression_spread",
             "prompt": (
-                "Generate a synthetic regression dataset with 90 samples, 3 features, noise 5.0 "
-                "and random_state 42, then report how many rows it has and the standard "
-                "deviation of its target rounded to 2 decimals. Return one row with columns "
-                "named n and sd_target."
-            ),
-            "reference_sql": (
-                "SELECT count(*) AS n, round(stddev(target), 2) AS sd_target "
-                "FROM lightgbm.main.make_regression("
-                "n_samples := 90, n_features := 3, noise := 5.0, random_state := 42)"
+                "Generate a synthetic regression dataset with 90 samples, 3 features, noise 5.0 and random_state "
+                "42, then report how many rows it has and the standard deviation of its target rounded to 2 "
+                "decimals. Return one row with columns named n and sd_target."
             ),
         },
     ]
@@ -433,7 +311,10 @@ _CATALOG_TAGS = {
     "vgi.license": "MIT",
     "vgi.support_contact": f"{SOURCE_URL}/issues",
     "vgi.support_policy_url": f"{SOURCE_URL}/blob/main/SUPPORT.md",
-    "vgi.title": "LightGBM for SQL",
+    "vgi.title": "LightGBM",
+    "vgi.subtitle": (
+        "Train, tune, evaluate, and explain gradient-boosted classifiers and regressors, with a saved-model registry."
+    ),
     "vgi.keywords": json.dumps(
         [
             "lightgbm",
@@ -811,12 +692,39 @@ def _function_table(fn: type) -> Table:
     primary_key = tm["primary_key"]
     # The key columns are inherently non-null (VGI804).
     not_null = tuple(dict.fromkeys(col for cols in primary_key for col in cols))
+    # vgi.v3 carries constraints only as canonical records. The worker produces
+    # every row of these read-only tables, so the key holds for all of them.
+    constraints = (
+        *(
+            constraint_record(
+                ["main"],
+                meta.name,
+                f"pk_{i}" if i else "pk",
+                "PRIMARY_KEY",
+                [[col] for col in cols],
+                enforcement="ENFORCED",
+                validation="ALL_ROWS",
+            )
+            for i, cols in enumerate(primary_key)
+        ),
+        *(
+            constraint_record(
+                ["main"],
+                meta.name,
+                f"{col}_not_null",
+                "NOT_NULL",
+                [[col]],
+                enforcement="ENFORCED",
+                validation="ALL_ROWS",
+            )
+            for col in not_null
+        ),
+    )
     return Table(
         name=meta.name,
         function=fn,
         comment=tm["comment"],
-        primary_key=primary_key,
-        not_null=not_null,
+        constraints=constraints,
         tags={
             "provider": "LightGBM",
             "domain": "machine-learning",
@@ -839,7 +747,7 @@ _LIGHTGBM_CATALOG = Catalog(
     tags=_CATALOG_TAGS,
     schemas=[
         Schema(
-            name="main",
+            path=["main"],
             comment="LightGBM train/predict model registry, datasets, and interpretation for SQL",
             tags=_SCHEMA_TAGS,
             tables=_TABLES,
