@@ -30,9 +30,9 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   by the VGI901/902 lint exemption for stored-model functions. A new haybarn
   test now runs every published example against stored models.
 - Examples that fit on `SELECT * FROM iris` (the schema/executable `fit`
-  examples, the typed `fit_lgbm_*` examples, README `cross_val_*`) leaked the
-  label into the features through the `target_name` string column; they now
-  `EXCLUDE (target_name)`.
+  examples, the typed `fit_lgbm_*` examples, the README quick-start `fit` and
+  `cross_val_*`) leaked the label into the features through the `target_name`
+  string column; they now `EXCLUDE (target_name)`.
 - **The worker could no longer be attached.** `vgi-python` 0.8.5 predates the
   `attach_catalogs` field the current community `vgi` extension requires, so
   every `ATTACH` failed with *"Worker returned an out-of-date Apache Arrow

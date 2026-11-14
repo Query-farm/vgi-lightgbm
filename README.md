@@ -19,9 +19,9 @@ become native categorical splits, no one-hot encoding required.
 INSTALL vgi FROM community; LOAD vgi;
 ATTACH 'lightgbm' (TYPE vgi, LOCATION 'uv run lightgbm_worker.py');
 
--- train + persist a model
+-- train + persist a model (target_name is the label spelled out: keep it out of the features)
 SELECT model_name, task FROM lightgbm.fit(
-  (SELECT * FROM lightgbm.iris()),
+  (SELECT * EXCLUDE (target_name) FROM lightgbm.iris()),
   model_name := 'iris_clf', estimator := 'lgbm_classifier', target := 'target', id := 'sample_id');
 
 -- predict later

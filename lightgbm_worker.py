@@ -18,7 +18,8 @@ Usage:
     python serve.py --port 8000         # serve over HTTP
 
     ATTACH 'lightgbm' (TYPE vgi, LOCATION 'uv run lightgbm_worker.py');
-    SELECT * FROM lightgbm.main.fit((SELECT * FROM lightgbm.main.iris()), model_name := 'm', target := 'target');
+    SELECT model_name FROM lightgbm.main.fit((SELECT * EXCLUDE (target_name) FROM lightgbm.main.iris()),
+        model_name := 'm', target := 'target', id := 'sample_id');
 """
 
 from __future__ import annotations
