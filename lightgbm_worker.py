@@ -35,8 +35,8 @@ from vgi.catalog.catalog_interface import CatalogAttachResult, CatalogInfo
 
 from vgi_lightgbm import __version__
 from vgi_lightgbm.datasets import DATASET_FUNCTIONS
-from vgi_lightgbm.importance import IMPORTANCE_FUNCTIONS
-from vgi_lightgbm.models import MODEL_FUNCTIONS
+from vgi_lightgbm.importance import GAIN_VS_PERMUTATION_EXAMPLE, IMPORTANCE_FUNCTIONS, SHAP_BY_SPECIES_EXAMPLE
+from vgi_lightgbm.models import MODEL_FUNCTIONS, OOF_CONFUSION_EXAMPLE
 from vgi_lightgbm.search import SEARCH_FUNCTIONS
 from vgi_lightgbm.typed_models import TYPED_FIT_FUNCTIONS
 
@@ -117,7 +117,7 @@ _CATALOG_EXECUTABLE_EXAMPLES = json.dumps(
             "sql": [
                 (
                     "SET VARIABLE iris_model = ("
-                    "SELECT model FROM lightgbm.main.fit((SELECT * FROM lightgbm.main.iris), "
+                    "SELECT model FROM lightgbm.main.fit((SELECT * EXCLUDE (target_name) FROM lightgbm.main.iris), "
                     "estimator := 'lgbm_classifier', target := 'target', id := 'sample_id'))"
                 ),
                 (
@@ -145,6 +145,8 @@ _CATALOG_EXECUTABLE_EXAMPLES = json.dumps(
                 "ORDER BY rank"
             ),
         },
+        # Composed: out-of-fold predictions joined back to the dataset (shared constant).
+        {"description": OOF_CONFUSION_EXAMPLE.description, "sql": OOF_CONFUSION_EXAMPLE.sql},
     ]
 )
 # The fixed agent-suitability suite (VGI152 / `vgi-lint simulate`). Each task is a
@@ -294,6 +296,15 @@ _CATALOG_AGENT_TEST_TASKS = json.dumps(
             ),
         },
         {
+            "name": "breast_cancer_oof_missed_malignant",
+            "prompt": (
+                "For a tumour screen the costly mistake is calling a malignant tumour benign. On the built-in "
+                "Wisconsin breast-cancer data, using all 30 cell-nucleus features, get leakage-free 5-fold "
+                "out-of-fold predictions from a LightGBM classifier and count how many tumours that are actually "
+                "malignant were predicted benign. Return a single row with one column named missed_malignant."
+            ),
+        },
+        {
             "name": "make_regression_spread",
             "prompt": (
                 "Generate a synthetic regression dataset with 90 samples, 3 features, noise 5.0 and random_state "
@@ -432,10 +443,15 @@ _SCHEMA_TAGS = {
                 "description": "Fit a LightGBM classifier on iris and return the training summary",
                 "sql": (
                     "SELECT estimator, task, n_samples, n_features, train_score "
-                    "FROM lightgbm.main.fit((SELECT * FROM lightgbm.main.iris), "
+                    "FROM lightgbm.main.fit((SELECT * EXCLUDE (target_name) FROM lightgbm.main.iris), "
                     "estimator := 'lgbm_classifier', target := 'target', id := 'sample_id')"
                 ),
-            }
+            },
+            # Composed examples, each defined once beside the function that drives it.
+            *(
+                {"description": e.description, "sql": e.sql}
+                for e in (OOF_CONFUSION_EXAMPLE, GAIN_VS_PERMUTATION_EXAMPLE, SHAP_BY_SPECIES_EXAMPLE)
+            ),
         ]
     ),
 }

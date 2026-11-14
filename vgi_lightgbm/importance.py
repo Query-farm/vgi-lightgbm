@@ -140,6 +140,42 @@ def _resolve_model(model_name: str, model: bytes) -> tuple[Any, ModelMetadata]:
 # ===========================================================================
 
 
+# Composed examples over a stored model ('iris_clf', created by fit's example).
+# Each is shared by its driving function's examples and the schema-level list.
+# feature_importance + permutation_importance: do the booster's split-gain ranking
+# and the model-agnostic shuffle ranking agree, feature by feature?
+GAIN_VS_PERMUTATION_EXAMPLE = FunctionExample(
+    sql=(
+        "SELECT f.feature, f.rank AS gain_rank, p.rank AS permutation_rank, round(f.importance, 1) AS gain, "
+        "round(p.importance_mean, 4) AS accuracy_drop "
+        "FROM lightgbm.main.feature_importance('iris_clf', importance_type := 'gain') f "
+        "JOIN lightgbm.main.permutation_importance((SELECT * EXCLUDE (target_name) FROM lightgbm.main.iris()), "
+        "model_name := 'iris_clf', target := 'target', random_state := 42) p USING (feature) "
+        "ORDER BY f.rank"
+    ),
+    description=(
+        "Do split-gain and permutation importance agree? Join the stored 'iris_clf' model's gain ranking to "
+        "its permutation (accuracy-drop) ranking per feature; both put the two petal measurements first"
+    ),
+)
+# explain + iris: SHAP rows joined to the dataset on (sample, true class) so each
+# flower contributes only its push toward its own species.
+SHAP_BY_SPECIES_EXAMPLE = FunctionExample(
+    sql=(
+        "SELECT i.target_name, e.feature, round(avg(abs(e.shap_value)), 3) AS mean_abs_shap "
+        "FROM lightgbm.main.explain((SELECT * EXCLUDE (target_name) FROM lightgbm.main.iris()), "
+        "model_name := 'iris_clf', id := 'sample_id') e "
+        "JOIN lightgbm.main.iris() i ON i.sample_id = e.sample_id AND i.target = e.class "
+        "GROUP BY i.target_name, e.feature ORDER BY i.target_name, mean_abs_shap DESC"
+    ),
+    description=(
+        "Which features push each flower toward its own species? Join SHAP contributions from the stored "
+        "'iris_clf' to iris on sample and true class, then average |SHAP| per species and feature "
+        "(petal length leads for all three species)"
+    ),
+)
+
+
 @dataclass(slots=True, frozen=True)
 class FeatureImportanceArgs:
     model_name: Annotated[str, Arg(0, doc="Name of a stored model (pass '' to use model:= instead).")]
@@ -199,7 +235,8 @@ class FeatureImportance(TableFunctionGenerator[FeatureImportanceArgs]):
                     "'iris_clf', importance_type := 'gain') WHERE rank <= 5 ORDER BY rank"
                 ),
                 description="Gain-based feature importance for a stored model",
-            )
+            ),
+            GAIN_VS_PERMUTATION_EXAMPLE,
         ]
 
     @classmethod
@@ -311,8 +348,9 @@ class ExplainModel(TableInOutGenerator[ExplainArgs]):
                     "FROM lightgbm.main.explain((SELECT * FROM lightgbm.main.diabetes()), "
                     "model_name := 'diab_reg', id := 'sample_id') GROUP BY feature ORDER BY mean_abs_shap DESC"
                 ),
-                description="Explain each row's prediction with per-feature contributions",
-            )
+                description="Rank features by mean absolute SHAP contribution for a stored regressor 'diab_reg'",
+            ),
+            SHAP_BY_SPECIES_EXAMPLE,
         ]
 
     @classmethod
@@ -464,7 +502,7 @@ class PermutationImportance(SinkBuffer[PermImportanceArgs, DrainState]):
         examples = [
             FunctionExample(
                 sql=(
-                    "SELECT feature, round(importance, 4) AS importance "
+                    "SELECT feature, round(importance_mean, 4) AS importance_mean "
                     "FROM lightgbm.main.permutation_importance("
                     "(SELECT * EXCLUDE (target_name) FROM lightgbm.main.iris()), "
                     "model_name := 'iris_clf', target := 'target', n_repeats := 1) "

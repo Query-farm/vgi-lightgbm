@@ -248,7 +248,8 @@ def _make_fit_function(est_name: str) -> type:
             "examples": [
                 FunctionExample(
                     sql=(
-                        f"SELECT model_name, task FROM lightgbm.main.{fn_name}((SELECT * FROM lightgbm.main.iris()), "
+                        f"SELECT model_name, task FROM lightgbm.main.{fn_name}("
+                        "(SELECT * EXCLUDE (target_name) FROM lightgbm.main.iris()), "
                         f"model_name := 'm', target := 'target', id := 'sample_id'"
                         + (f", {param_hint}" if param_hint else "")
                         + ")"

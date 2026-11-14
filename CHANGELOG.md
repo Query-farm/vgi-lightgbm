@@ -6,6 +6,15 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- Composed example queries that combine the worker's own functions: an
+  out-of-fold confusion matrix (`cross_val_predict` joined back to `iris`), gain
+  vs permutation importance side by side (`feature_importance` +
+  `permutation_importance`), and per-species SHAP drivers (`explain` joined to
+  `iris`). Published on the driving function, the schema example list and (the
+  offline one) `vgi.executable_examples`, plus a README snippet and a new
+  `breast_cancer_oof_missed_malignant` agent task.
+
 ### Changed
 - **Ported to VGI protocol 3.2** (`vgi-python` 0.30.0 -> 0.50.0, `vgi-rpc`
   0.44.1 -> 0.53.1) so the worker attaches with the current community `vgi`
@@ -16,6 +25,14 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (haybarn 2.0 / vgi.v3).
 
 ### Fixed
+- `permutation_importance`'s example selected a non-existent `importance`
+  column (the output is `importance_mean`), so it failed to bind; it was hidden
+  by the VGI901/902 lint exemption for stored-model functions. A new haybarn
+  test now runs every published example against stored models.
+- Examples that fit on `SELECT * FROM iris` (the schema/executable `fit`
+  examples, the typed `fit_lgbm_*` examples, README `cross_val_*`) leaked the
+  label into the features through the `target_name` string column; they now
+  `EXCLUDE (target_name)`.
 - **The worker could no longer be attached.** `vgi-python` 0.8.5 predates the
   `attach_catalogs` field the current community `vgi` extension requires, so
   every `ATTACH` failed with *"Worker returned an out-of-date Apache Arrow

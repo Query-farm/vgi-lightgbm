@@ -43,3 +43,54 @@ def test_sql_file(test_file: str) -> None:
         run_test_file(test_file, con)
     finally:
         con.close()
+
+
+def _published_example_sqls() -> list[tuple[str, str]]:
+    """Every published example SQL: per-function lists, schema list, executable examples.
+
+    The model-reading functions are exempt from vgi-lint's live example check
+    (VGI901/902 -- no stored model exists in a fresh session), so nothing else
+    would notice one of their examples going stale (e.g. a renamed column).
+    """
+    import json
+
+    import lightgbm_worker as w
+
+    out: list[tuple[str, str]] = []
+    for fn in w._FUNCTIONS:
+        for ex in getattr(fn.Meta, "examples", []) or []:
+            out.append((fn.Meta.name, ex.sql))
+    for ex in json.loads(w._SCHEMA_TAGS["vgi.example_queries"]):
+        out.append(("schema", ex["sql"]))
+    for ex in json.loads(w._CATALOG_EXECUTABLE_EXAMPLES):
+        stmts = ex["sql"] if isinstance(ex["sql"], list) else [ex["sql"]]
+        out.extend(("executable", s) for s in stmts)
+    # california_housing downloads its data on first use; keep this test offline.
+    return [(name, sql) for name, sql in out if "california_housing" not in sql]
+
+
+def test_published_examples_execute() -> None:
+    """Each published example binds and runs once the models they name are stored."""
+    con = haybarn.connect()
+    con.execute("INSTALL vgi FROM community")
+    con.execute("LOAD vgi")
+    try:
+        con.execute(f"ATTACH 'lightgbm' AS lightgbm (TYPE vgi, LOCATION '{os.environ['VGI_LIGHTGBM_WORKER']}')")
+        # The stored models the illustrative examples refer to by name.
+        con.execute(
+            "SELECT model_name FROM lightgbm.main.fit((SELECT * EXCLUDE (target_name) FROM lightgbm.main.iris()), "
+            "model_name := 'iris_clf', estimator := 'lgbm_classifier', target := 'target', id := 'sample_id')"
+        ).fetchall()
+        con.execute(
+            "SELECT model_name FROM lightgbm.main.fit((SELECT * FROM lightgbm.main.diabetes()), "
+            "model_name := 'diab_reg', estimator := 'lgbm_regressor', target := 'progression', id := 'sample_id')"
+        ).fetchall()
+        failures = []
+        for name, sql in _published_example_sqls():
+            try:
+                con.execute(sql).fetchall()
+            except Exception as exc:  # collect every failure
+                failures.append(f"{name}: {exc}\n  {sql}")
+        assert not failures, "\n".join(failures)
+    finally:
+        con.close()

@@ -672,6 +672,27 @@ def _fit_fold(estimator_name: str, params: dict[str, Any], x: np.ndarray, y: np.
     return est
 
 
+# Composed example (cross_val_predict + iris): out-of-fold predictions joined back
+# to the dataset twice -- once for the true species, once to name the predicted
+# class. Shared by cross_val_predict's examples, the schema-level example list and
+# the catalog's executable examples (offline + deterministic).
+OOF_CONFUSION_EXAMPLE = FunctionExample(
+    sql=(
+        "SELECT a.target_name AS actual, l.target_name AS predicted, count(*) AS n "
+        "FROM lightgbm.main.cross_val_predict((SELECT * EXCLUDE (target_name) FROM lightgbm.main.iris()), "
+        "estimator := 'lgbm_classifier', target := 'target', id := 'sample_id', cv := 5) p "
+        "JOIN lightgbm.main.iris() a USING (sample_id) "
+        "JOIN (SELECT DISTINCT target, target_name FROM lightgbm.main.iris()) l ON l.target = p.prediction "
+        "GROUP BY actual, predicted ORDER BY actual, predicted"
+    ),
+    description=(
+        "Out-of-fold confusion matrix on iris with species names: 5-fold cross_val_predict joined back to "
+        "iris for the true and the predicted species (setosa is never confused; versicolor and virginica "
+        "are mixed up a handful of times)"
+    ),
+)
+
+
 class CrossValPredict(SinkBuffer[CrossValArgs, DrainState]):
     FunctionArguments: ClassVar[type] = CrossValArgs
 
@@ -736,6 +757,7 @@ class CrossValPredict(SinkBuffer[CrossValArgs, DrainState]):
             ),
         }
         examples = [
+            OOF_CONFUSION_EXAMPLE,
             FunctionExample(
                 sql=(
                     "SELECT prediction, count(*) AS n FROM lightgbm.main.cross_val_predict("
@@ -744,7 +766,7 @@ class CrossValPredict(SinkBuffer[CrossValArgs, DrainState]):
                     "GROUP BY prediction ORDER BY prediction"
                 ),
                 description="Distribution of the 5-fold out-of-fold predictions on iris",
-            )
+            ),
         ]
 
     @classmethod

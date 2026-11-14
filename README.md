@@ -132,12 +132,23 @@ SELECT * FROM lightgbm.predict((SELECT * FROM new_flowers), model_name := 'iris_
 -- pred_leaf := true emits the per-tree leaf index list (mutually exclusive)
 SELECT margin FROM lightgbm.predict((SELECT * FROM new_flowers), model_name := 'iris_clf', output_margin := true);
 
--- evaluate without persisting
+-- evaluate without persisting (drop target_name: it is the label spelled out,
+-- and would leak into the features as a categorical column)
 SELECT count(*) FROM lightgbm.cross_val_predict(
-  (SELECT * FROM lightgbm.iris()), estimator := 'lgbm_classifier', target := 'target', id := 'sample_id', cv := 5);
+  (SELECT * EXCLUDE (target_name) FROM lightgbm.iris()), estimator := 'lgbm_classifier', target := 'target',
+  id := 'sample_id', cv := 5);
 
 SELECT fold, score FROM lightgbm.cross_val_score(
-  (SELECT * FROM lightgbm.iris()), estimator := 'lgbm_classifier', target := 'target', cv := 5);
+  (SELECT * EXCLUDE (target_name) FROM lightgbm.iris()), estimator := 'lgbm_classifier', target := 'target', cv := 5);
+
+-- out-of-fold confusion matrix with species names: join the predictions back to the dataset
+SELECT a.target_name AS actual, l.target_name AS predicted, count(*) AS n
+FROM lightgbm.cross_val_predict(
+  (SELECT * EXCLUDE (target_name) FROM lightgbm.iris()), estimator := 'lgbm_classifier', target := 'target',
+  id := 'sample_id', cv := 5) p
+JOIN lightgbm.iris() a USING (sample_id)
+JOIN (SELECT DISTINCT target, target_name FROM lightgbm.iris()) l ON l.target = p.prediction
+GROUP BY actual, predicted ORDER BY actual, predicted;
 
 -- grid search: leaderboard + the refit best model BLOB on the best row. The
 -- estimator + its grid are one discriminated-union argument (the tag picks the

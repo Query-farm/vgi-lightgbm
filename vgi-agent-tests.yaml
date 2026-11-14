@@ -123,3 +123,10 @@ tasks:
   reference_sql: >-
     SELECT count(*) AS n, round(stddev(target), 2) AS sd_target FROM lightgbm.main.make_regression(n_samples
     := 90, n_features := 3, noise := 5.0, random_state := 42)
+
+- name: breast_cancer_oof_missed_malignant
+  reference_sql: >-
+    SELECT count(*) AS missed_malignant FROM lightgbm.main.cross_val_predict((SELECT * EXCLUDE (target_name)
+    FROM lightgbm.main.breast_cancer), estimator := 'lgbm_classifier', target := 'target', id := 'sample_id',
+    cv := 5) p JOIN lightgbm.main.breast_cancer b USING (sample_id) WHERE b.target_name = 'malignant' AND
+    p.prediction <> b.target
