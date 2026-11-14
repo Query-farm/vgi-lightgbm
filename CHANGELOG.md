@@ -6,6 +6,11 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-14
+
+First tagged release. It covers everything below, including the initial
+development snapshot that was recorded as 0.1.0 on 2026-06-23 but never tagged.
+
 ### Added
 - Composed example queries that combine the worker's own functions: an
   out-of-fold confusion matrix (`cross_val_predict` joined back to `iris`), gain
@@ -82,7 +87,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the `fit` summary schema).
 - Normalized SQL examples / docstrings to the `:=` named-argument syntax.
 
-## [0.1.0] - 2026-06-23
+## Initial development - 2026-06-23 (untagged)
 
 ### Added
 - Initial `vgi-lightgbm` VGI worker exposing LightGBM to DuckDB/SQL.
