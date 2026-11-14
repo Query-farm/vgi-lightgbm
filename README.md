@@ -253,3 +253,7 @@ and a Docker build + `/health` smoke test on every push and PR. Dependabot
 (`.github/dependabot.yml`) keeps the Python deps, GitHub Actions, and the Docker
 base image up to date weekly.
 
+
+## Executed notebook
+
+See [the portable calibration extrapolation experiment](notebooks/README.md) for SQL training, held-out error, prediction contributions and a focused boosting comparison.
