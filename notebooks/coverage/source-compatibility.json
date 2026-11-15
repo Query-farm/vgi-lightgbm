@@ -1,0 +1,33 @@
+{
+  "release": "v0.1.0",
+  "release_commit": "51375ea0956f0dcd6441754213d7726dc16f12db",
+  "current_revision": "51375ea0956f0dcd6441754213d7726dc16f12db",
+  "source_ci": {
+    "url": "https://github.com/Query-farm/vgi-lightgbm/actions/runs/43615456249",
+    "revision": "51375ea0956f0dcd6441754213d7726dc16f12db",
+    "conclusion": "success"
+  },
+  "deployment_baseline": {
+    "url": "https://github.com/Query-farm/vgi-lightgbm/actions/runs/43615457355",
+    "conclusion": "failure",
+    "scope": "Existing deployment workflow; untouched and not retried by notebook work."
+  },
+  "runtime": "Haybarn2.0.0rc11",
+  "launch": "uvx --python 3.13 --from git+https://github.com/Query-farm/vgi-lightgbm@v0.1.0 python lightgbm_release.py",
+  "source_review": "Released tag peels to the exact current-main commit. All implementation, top-level worker, package and root-lock bytes identical; notebooks execute that exact released package plus SHA-verified unchanged entry module.",
+  "root_dependencies_unchanged": true,
+  "scope": "22logical named table-functions with six same-named physical table aliases. All functions, overloads, native arguments and complete exported static/dynamic column metadata retained. No views/COPY; optional registry-writing fit/search and destructive drop_model remain in denominator.11surfaces used in two focused narratives; all writes confined to a newly created temporary local model registry.",
+  "metadata_provenance": "Actual catalog-metadata.json vgi.title/vgi.subtitle.",
+  "resolved_worker_packages": {
+    "vgi-lightgbm": "0.1.0",
+    "vgi-python": "0.51.1",
+    "vgi-rpc": "0.53.1",
+    "lightgbm": "4.7.0",
+    "scikit-learn": "1.9.1",
+    "numpy": "2.5.4",
+    "scipy": "1.18.1",
+    "pyarrow": "26.0.1"
+  },
+  "launcher": "Worker-specific no-argument companion checks installed Git commit and package version, retrieves only immutable top-level entry omitted from wheel, fixedSHA256d57ba862014655608ddaef676c67a68fe8eed41c88770fcb8860ebdabf1e9fad, bounded flock and atomic cache publication. No arbitrary URL/revision/command interface and no dependency override.",
+  "platform": "POSIX Mac/Linux launcher; platform OpenMP library required by upstream LightGBM. macOSARM verified; no manual hostedColabUI/Linux/Windows run."
+}

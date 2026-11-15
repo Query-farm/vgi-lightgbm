@@ -1,0 +1,465 @@
+{
+  "schema_version": 1,
+  "catalogs": {
+    "released": {
+      "path": "coverage/catalog-released.json",
+      "sha256": "956660e3ec32062b87f761a55a3267007c88d9a905b51151a708f7f256637a8b",
+      "review": {
+        "status": "approved",
+        "reviewer": "Codex /root/notebooks_earthquakes",
+        "reviewed_at": "2026-11-15T01:48:31.638293+00:00",
+        "catalog_sha256": "956660e3ec32062b87f761a55a3267007c88d9a905b51151a708f7f256637a8b",
+        "notes": "Complete actual22tablefunctions and6same-named physicaltablealiases =22logical surfaces. All native arguments/static or dynamic output schemas retained; no views/COPY/auth. Optional model-writing fits/search and deletion remain included. Both current and released tags identify exact same51375ea commit, verified in source and installed Git package. All model writes confined to newly created temporary local registry."
+      }
+    },
+    "current": {
+      "path": "coverage/catalog-current.json",
+      "sha256": "956660e3ec32062b87f761a55a3267007c88d9a905b51151a708f7f256637a8b",
+      "review": {
+        "status": "approved",
+        "reviewer": "Codex /root/notebooks_earthquakes",
+        "reviewed_at": "2026-11-15T01:48:31.638293+00:00",
+        "catalog_sha256": "956660e3ec32062b87f761a55a3267007c88d9a905b51151a708f7f256637a8b",
+        "notes": "Complete actual22tablefunctions and6same-named physicaltablealiases =22logical surfaces. All native arguments/static or dynamic output schemas retained; no views/COPY/auth. Optional model-writing fits/search and deletion remain included. Both current and released tags identify exact same51375ea commit, verified in source and installed Git package. All model writes confined to newly created temporary local registry."
+      }
+    }
+  },
+  "notebooks": [
+    {
+      "path": "01_test_calibration_extrapolation.ipynb",
+      "sha256": "42a0094d3fc68738d8c7d938b76545c2f0b7e02faa0bed0171108c1b08747ede",
+      "execution": {
+        "path": "coverage/run-01.json",
+        "sha256": "7bb5504f9c4a46e194debd55592f0dce22136fb809d39ec6cc1dbd235d02dadb"
+      }
+    },
+    {
+      "path": "02_gain_shuffling_and_average_response.ipynb",
+      "sha256": "11130888a6e3cfded30630cf772135d0267ffb960bce4f53a59e184c6aee7232",
+      "execution": {
+        "path": "coverage/run-02.json",
+        "sha256": "0c2d32c18638ae2b893d7ef7097aed7f1583e7101a8f2c946afd1bd33de470bf"
+      }
+    }
+  ],
+  "examples": [
+    {
+      "object": {
+        "schema": "main",
+        "name": "fit"
+      },
+      "notebook": "01_test_calibration_extrapolation.ipynb",
+      "sql": [
+        {
+          "cell": "3ff49ea2",
+          "reference": "lightgbm.main.fit"
+        }
+      ],
+      "narrative_cells": [
+        "c633068e",
+        "d2a1cf5a"
+      ],
+      "result_cells": [
+        "3ff49ea2",
+        "registry-check",
+        "b6eb257e",
+        "d1f058a3",
+        "fd9e399c"
+      ],
+      "interpretation_cells": [
+        "b6eb257e",
+        "b22df4f4"
+      ],
+      "review": {
+        "status": "approved",
+        "reviewer": "Codex /root/notebooks_earthquakes",
+        "reviewed_at": "2026-11-15T01:48:31.638293+00:00",
+        "notebook_sha256": "42a0094d3fc68738d8c7d938b76545c2f0b7e02faa0bed0171108c1b08747ede",
+        "catalog_sha256": [
+          "956660e3ec32062b87f761a55a3267007c88d9a905b51151a708f7f256637a8b",
+          "956660e3ec32062b87f761a55a3267007c88d9a905b51151a708f7f256637a8b"
+        ],
+        "purpose": "Train a fixed authored calibration relation once and separate fit from extrapolation behavior.",
+        "finding": "Stateful fit materialized once; only129training rows and one voltage feature. Returned model summary and registry metadata reconcile. Experiment changes only boosting iterations; heldout/outsiderange populations retained with their own denominators."
+      }
+    },
+    {
+      "object": {
+        "schema": "main",
+        "name": "predict"
+      },
+      "notebook": "01_test_calibration_extrapolation.ipynb",
+      "sql": [
+        {
+          "cell": "27437eae",
+          "reference": "lightgbm.main.predict"
+        }
+      ],
+      "narrative_cells": [
+        "10644a34",
+        "8d5fec4f"
+      ],
+      "result_cells": [
+        "b6eb257e",
+        "d1f058a3",
+        "06b5716d",
+        "fd9e399c"
+      ],
+      "interpretation_cells": [
+        "b6eb257e",
+        "8d5fec4f",
+        "b22df4f4"
+      ],
+      "review": {
+        "status": "approved",
+        "reviewer": "Codex /root/notebooks_earthquakes",
+        "reviewed_at": "2026-11-15T01:48:31.638293+00:00",
+        "notebook_sha256": "42a0094d3fc68738d8c7d938b76545c2f0b7e02faa0bed0171108c1b08747ede",
+        "catalog_sha256": [
+          "956660e3ec32062b87f761a55a3267007c88d9a905b51151a708f7f256637a8b",
+          "956660e3ec32062b87f761a55a3267007c88d9a905b51151a708f7f256637a8b"
+        ],
+        "purpose": "Measure predictions on a fixed grid inside and beyond training support.",
+        "finding": "All241IDs returned once, reference joined after prediction, separate MAE/RMSE across129training/32heldout/80outside. Flat outside prediction measured, not inferred from source alone; no real sensor/uncertainty/profit claim."
+      }
+    },
+    {
+      "object": {
+        "schema": "main",
+        "name": "explain"
+      },
+      "notebook": "01_test_calibration_extrapolation.ipynb",
+      "sql": [
+        {
+          "cell": "094364e1",
+          "reference": "lightgbm.main.explain"
+        }
+      ],
+      "narrative_cells": [
+        "28c4e204",
+        "b67d4f90"
+      ],
+      "result_cells": [
+        "094364e1",
+        "fd9e399c"
+      ],
+      "interpretation_cells": [
+        "28c4e204",
+        "b22df4f4"
+      ],
+      "review": {
+        "status": "approved",
+        "reviewer": "Codex /root/notebooks_earthquakes",
+        "reviewed_at": "2026-11-15T01:48:31.638293+00:00",
+        "notebook_sha256": "42a0094d3fc68738d8c7d938b76545c2f0b7e02faa0bed0171108c1b08747ede",
+        "catalog_sha256": [
+          "956660e3ec32062b87f761a55a3267007c88d9a905b51151a708f7f256637a8b",
+          "956660e3ec32062b87f761a55a3267007c88d9a905b51151a708f7f256637a8b"
+        ],
+        "purpose": "Reconcile regression prediction with actual base and feature contribution outputs.",
+        "finding": "Base added once perID plus contributions reconstructs all241predictions in mm. Representative rows shown; interpretability is model accounting, not causal effect or uncertainty."
+      }
+    },
+    {
+      "object": {
+        "schema": "main",
+        "name": "models"
+      },
+      "notebook": "01_test_calibration_extrapolation.ipynb",
+      "sql": [
+        {
+          "cell": "registry-query",
+          "reference": "lightgbm.main.models"
+        }
+      ],
+      "narrative_cells": [
+        "registry-story",
+        "drop-story"
+      ],
+      "result_cells": [
+        "registry-query",
+        "registry-check",
+        "drop-finding"
+      ],
+      "interpretation_cells": [
+        "registry-check",
+        "drop-finding"
+      ],
+      "review": {
+        "status": "approved",
+        "reviewer": "Codex /root/notebooks_earthquakes",
+        "reviewed_at": "2026-11-15T01:48:31.638293+00:00",
+        "notebook_sha256": "42a0094d3fc68738d8c7d938b76545c2f0b7e02faa0bed0171108c1b08747ede",
+        "catalog_sha256": [
+          "956660e3ec32062b87f761a55a3267007c88d9a905b51151a708f7f256637a8b",
+          "956660e3ec32062b87f761a55a3267007c88d9a905b51151a708f7f256637a8b"
+        ],
+        "purpose": "Inspect model provenance and verify registry scope before using a named model.",
+        "finding": "Full registry and namedlookup agree on129training rows/onefeature/target/modelidentity; an initiallyempty temporary registry becomes exactlyoneentry then emptyafterdeletion. Actual metadata shown including train_score/runtimeversion; training score not heldout performance."
+      }
+    },
+    {
+      "object": {
+        "schema": "main",
+        "name": "model_info"
+      },
+      "notebook": "01_test_calibration_extrapolation.ipynb",
+      "sql": [
+        {
+          "cell": "registry-query",
+          "reference": "lightgbm.main.model_info"
+        }
+      ],
+      "narrative_cells": [
+        "registry-story",
+        "drop-story"
+      ],
+      "result_cells": [
+        "registry-query",
+        "registry-check",
+        "drop-finding"
+      ],
+      "interpretation_cells": [
+        "registry-check",
+        "drop-finding"
+      ],
+      "review": {
+        "status": "approved",
+        "reviewer": "Codex /root/notebooks_earthquakes",
+        "reviewed_at": "2026-11-15T01:48:31.638293+00:00",
+        "notebook_sha256": "42a0094d3fc68738d8c7d938b76545c2f0b7e02faa0bed0171108c1b08747ede",
+        "catalog_sha256": [
+          "956660e3ec32062b87f761a55a3267007c88d9a905b51151a708f7f256637a8b",
+          "956660e3ec32062b87f761a55a3267007c88d9a905b51151a708f7f256637a8b"
+        ],
+        "purpose": "Inspect model provenance and verify registry scope before using a named model.",
+        "finding": "Full registry and namedlookup agree on129training rows/onefeature/target/modelidentity; an initiallyempty temporary registry becomes exactlyoneentry then emptyafterdeletion. Actual metadata shown including train_score/runtimeversion; training score not heldout performance."
+      }
+    },
+    {
+      "object": {
+        "schema": "main",
+        "name": "drop_model"
+      },
+      "notebook": "01_test_calibration_extrapolation.ipynb",
+      "sql": [
+        {
+          "cell": "drop-query",
+          "reference": "lightgbm.main.drop_model"
+        }
+      ],
+      "narrative_cells": [
+        "drop-story"
+      ],
+      "result_cells": [
+        "drop-query",
+        "drop-finding"
+      ],
+      "interpretation_cells": [
+        "drop-finding",
+        "b22df4f4"
+      ],
+      "review": {
+        "status": "approved",
+        "reviewer": "Codex /root/notebooks_earthquakes",
+        "reviewed_at": "2026-11-15T01:48:31.638293+00:00",
+        "notebook_sha256": "42a0094d3fc68738d8c7d938b76545c2f0b7e02faa0bed0171108c1b08747ede",
+        "catalog_sha256": [
+          "956660e3ec32062b87f761a55a3267007c88d9a905b51151a708f7f256637a8b",
+          "956660e3ec32062b87f761a55a3267007c88d9a905b51151a708f7f256637a8b"
+        ],
+        "purpose": "Close a local disposable model lifecycle and verify idempotent removal.",
+        "finding": "First materialized removal of notebook-created calibration returns true; second returns false; full registry/namedlookup both empty. Only notebook-created temporary directory touched; predictions already materialized remain available."
+      }
+    },
+    {
+      "object": {
+        "schema": "main",
+        "name": "make_regression"
+      },
+      "notebook": "02_gain_shuffling_and_average_response.ipynb",
+      "sql": [
+        {
+          "cell": "data-query",
+          "reference": "lightgbm.main.make_regression"
+        }
+      ],
+      "narrative_cells": [
+        "question",
+        "data-story"
+      ],
+      "result_cells": [
+        "data-query",
+        "performance-finding",
+        "checks-finding"
+      ],
+      "interpretation_cells": [
+        "data-story",
+        "experiment-story"
+      ],
+      "review": {
+        "status": "approved",
+        "reviewer": "Codex /root/notebooks_earthquakes",
+        "reviewed_at": "2026-11-15T01:48:31.638293+00:00",
+        "notebook_sha256": "11130888a6e3cfded30630cf772135d0267ffb960bce4f53a59e184c6aee7232",
+        "catalog_sha256": [
+          "956660e3ec32062b87f761a55a3267007c88d9a905b51151a708f7f256637a8b",
+          "956660e3ec32062b87f761a55a3267007c88d9a905b51151a708f7f256637a8b"
+        ],
+        "purpose": "Create a deterministic generated population for interpretation comparisons.",
+        "finding": "600unique rows/threegeneratedfeatures/target fromactualworker, seed42 twoinformativeterms noiseSD5; SQL addsconstantcontrol and fixes450training/150heldout. Coefficients not returned, so true informativefeatureidentity unclaimed. Whole generated table compared across experiment."
+      }
+    },
+    {
+      "object": {
+        "schema": "main",
+        "name": "fit_lgbm_regressor"
+      },
+      "notebook": "02_gain_shuffling_and_average_response.ipynb",
+      "sql": [
+        {
+          "cell": "fit-query",
+          "reference": "lightgbm.main.fit_lgbm_regressor"
+        }
+      ],
+      "narrative_cells": [
+        "fit-story"
+      ],
+      "result_cells": [
+        "fit-query",
+        "performance-finding",
+        "importance-chart",
+        "checks-finding"
+      ],
+      "interpretation_cells": [
+        "fit-story",
+        "importance-chart",
+        "experiment-story"
+      ],
+      "review": {
+        "status": "approved",
+        "reviewer": "Codex /root/notebooks_earthquakes",
+        "reviewed_at": "2026-11-15T01:48:31.638293+00:00",
+        "notebook_sha256": "11130888a6e3cfded30630cf772135d0267ffb960bce4f53a59e184c6aee7232",
+        "catalog_sha256": [
+          "956660e3ec32062b87f761a55a3267007c88d9a905b51151a708f7f256637a8b",
+          "956660e3ec32062b87f761a55a3267007c88d9a905b51151a708f7f256637a8b"
+        ],
+        "purpose": "Make estimator settings and feature scope explicit for a fixed interpretation model.",
+        "finding": "Typedfit receives450training rows/fourfeatures,60iterations/15leaves/minchild10/seed13; ID/targetexcluded. Returnedmetadatareconciles; all600model predictions and gain values remain comparable across evaluation-only experiment."
+      }
+    },
+    {
+      "object": {
+        "schema": "main",
+        "name": "feature_importance"
+      },
+      "notebook": "02_gain_shuffling_and_average_response.ipynb",
+      "sql": [
+        {
+          "cell": "importance-query",
+          "reference": "lightgbm.main.feature_importance"
+        }
+      ],
+      "narrative_cells": [
+        "importance-story"
+      ],
+      "result_cells": [
+        "importance-chart",
+        "checks-finding"
+      ],
+      "interpretation_cells": [
+        "importance-story",
+        "importance-chart",
+        "experiment-story"
+      ],
+      "review": {
+        "status": "approved",
+        "reviewer": "Codex /root/notebooks_earthquakes",
+        "reviewed_at": "2026-11-15T01:48:31.638293+00:00",
+        "notebook_sha256": "11130888a6e3cfded30630cf772135d0267ffb960bce4f53a59e184c6aee7232",
+        "catalog_sha256": [
+          "956660e3ec32062b87f761a55a3267007c88d9a905b51151a708f7f256637a8b",
+          "956660e3ec32062b87f761a55a3267007c88d9a905b51151a708f7f256637a8b"
+        ],
+        "purpose": "Compare fitted split gain with an evaluation-based loss measurement without mixing units.",
+        "finding": "Allfourfeatures retained, objective-dependentgain totals displayed separately fromMAEshuffleloss; constantzero andsmallgain explicit. Gain fromfixedmodel is invariant whenevaluationpopulationchanges; no coefficient/causalclaim."
+      }
+    },
+    {
+      "object": {
+        "schema": "main",
+        "name": "permutation_importance"
+      },
+      "notebook": "02_gain_shuffling_and_average_response.ipynb",
+      "sql": [
+        {
+          "cell": "importance-query",
+          "reference": "lightgbm.main.permutation_importance"
+        }
+      ],
+      "narrative_cells": [
+        "importance-story"
+      ],
+      "result_cells": [
+        "importance-chart",
+        "checks-finding"
+      ],
+      "interpretation_cells": [
+        "importance-story",
+        "importance-chart",
+        "experiment-story"
+      ],
+      "review": {
+        "status": "approved",
+        "reviewer": "Codex /root/notebooks_earthquakes",
+        "reviewed_at": "2026-11-15T01:48:31.638293+00:00",
+        "notebook_sha256": "11130888a6e3cfded30630cf772135d0267ffb960bce4f53a59e184c6aee7232",
+        "catalog_sha256": [
+          "956660e3ec32062b87f761a55a3267007c88d9a905b51151a708f7f256637a8b",
+          "956660e3ec32062b87f761a55a3267007c88d9a905b51151a708f7f256637a8b"
+        ],
+        "purpose": "Measure loss increase when selected evaluation features are shuffled.",
+        "finding": "Explicitneg_mean_absolute_error scorer yields MAEincrease in targetunits; fivefixedseedshuffles report mean/SD, notCI. Allfourrowsincludingzero/tinyretained, negativevaluesallowed. Trainingvsheldout experiment preservesmodelbutchangespopulation."
+      }
+    },
+    {
+      "object": {
+        "schema": "main",
+        "name": "partial_dependence"
+      },
+      "notebook": "02_gain_shuffling_and_average_response.ipynb",
+      "sql": [
+        {
+          "cell": "pd-query",
+          "reference": "lightgbm.main.partial_dependence"
+        }
+      ],
+      "narrative_cells": [
+        "pd-story",
+        "checks-story"
+      ],
+      "result_cells": [
+        "pd-chart",
+        "checks-finding"
+      ],
+      "interpretation_cells": [
+        "pd-story",
+        "pd-chart",
+        "experiment-story"
+      ],
+      "review": {
+        "status": "approved",
+        "reviewer": "Codex /root/notebooks_earthquakes",
+        "reviewed_at": "2026-11-15T01:48:31.638293+00:00",
+        "notebook_sha256": "11130888a6e3cfded30630cf772135d0267ffb960bce4f53a59e184c6aee7232",
+        "catalog_sha256": [
+          "956660e3ec32062b87f761a55a3267007c88d9a905b51151a708f7f256637a8b",
+          "956660e3ec32062b87f761a55a3267007c88d9a905b51151a708f7f256637a8b"
+        ],
+        "purpose": "Interpret model-average feature replacement and verify one returned grid point independently.",
+        "finding": "Actual17pointfeature0curve usesselectedbackground. SQLreplacesfeature0atmiddlepoint, callsactualpredict, averages andmatchesreturnedPDwithin1e-8. RegressionclassNULL preserved; background/gridmaychange withsplit, notacausaleffect or observed response."
+      }
+    }
+  ]
+}

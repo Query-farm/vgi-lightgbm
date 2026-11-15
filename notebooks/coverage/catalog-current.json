@@ -1,0 +1,392 @@
+{
+  "schema_version": 1,
+  "repository": "Query-farm/vgi-lightgbm",
+  "revision": "51375ea0956f0dcd6441754213d7726dc16f12db",
+  "release_tag": "v0.1.0",
+  "captured_at": "2026-11-15T01:38:18.674692+00:00",
+  "default_schema": "main",
+  "scope": "all_public_functions_and_tables",
+  "complete": true,
+  "evidence": [
+    {
+      "path": "coverage/arguments.json",
+      "sha256": "99385ee88a4dc898798dfd06d713b280c1b7f18165825d6efc9cfebc1cf4f7a9",
+      "description": "Actual complete runtime exports, native overload arguments, table columns and exact release/main revision review."
+    },
+    {
+      "path": "coverage/catalog-metadata.json",
+      "sha256": "663f6416c631e01f6e7d8cad1bfd533a9c6bcbddd55a79df88ce2e2979bc43d6",
+      "description": "Actual complete runtime exports, native overload arguments, table columns and exact release/main revision review."
+    },
+    {
+      "path": "coverage/copy-formats.json",
+      "sha256": "b6194d5da1ce0370a1c3abb065c9b0398511f1458dabf6aa5eb045677585101a",
+      "description": "Actual complete runtime exports, native overload arguments, table columns and exact release/main revision review."
+    },
+    {
+      "path": "coverage/functions.json",
+      "sha256": "1615fa660d068054f2f07c39095e0dae916f4a7e07507259ed684962181463b5",
+      "description": "Actual complete runtime exports, native overload arguments, table columns and exact release/main revision review."
+    },
+    {
+      "path": "coverage/resolved-worker-packages.json",
+      "sha256": "d885e02506375292ceba299cf60e0b16f4438a6640f323cde3785dbaa82fbe18",
+      "description": "Actual complete runtime exports, native overload arguments, table columns and exact release/main revision review."
+    },
+    {
+      "path": "coverage/source-compatibility.json",
+      "sha256": "dbc2e3356c4fccc81c4857ef65528bd6de77303368386c38c6dae1a48608c424",
+      "description": "Actual complete runtime exports, native overload arguments, table columns and exact release/main revision review."
+    },
+    {
+      "path": "coverage/table-columns.json",
+      "sha256": "aaaa6a77fb1a2cee46363feb4dfffa03727b9ebb892b19ef8eb2d24a1e8779f7",
+      "description": "Actual complete runtime exports, native overload arguments, table columns and exact release/main revision review."
+    },
+    {
+      "path": "coverage/tables.json",
+      "sha256": "6ff843c099645296f1bad1c9ac849f11aed07c7c6ced00aeff63d802fd4af644",
+      "description": "Actual complete runtime exports, native overload arguments, table columns and exact release/main revision review."
+    },
+    {
+      "path": "coverage/views.json",
+      "sha256": "2ff38e1f06d98c390cabfdb5101aa3c833d684f66aaa5ac21a66afc2abd3ee75",
+      "description": "Actual complete runtime exports, native overload arguments, table columns and exact release/main revision review."
+    }
+  ],
+  "objects": [
+    {
+      "schema": "main",
+      "name": "breast_cancer",
+      "kind": "function",
+      "authentication": "none",
+      "access": "read",
+      "signatures": [
+        "breast_cancer() -> TABLE(sample_id INTEGER, mean_radius DOUBLE, mean_texture DOUBLE, mean_perimeter DOUBLE, mean_area DOUBLE, mean_smoothness DOUBLE, mean_compactness DOUBLE, mean_concavity DOUBLE, mean_concave_points DOUBLE, mean_symmetry DOUBLE, mean_fractal_dimension DOUBLE, radius_error DOUBLE, texture_error DOUBLE, perimeter_error DOUBLE, area_error DOUBLE, smoothness_error DOUBLE, compactness_error DOUBLE, concavity_error DOUBLE, concave_points_error DOUBLE, symmetry_error DOUBLE, fractal_dimension_error DOUBLE, worst_radius DOUBLE, worst_texture DOUBLE, worst_perimeter DOUBLE, worst_area DOUBLE, worst_smoothness DOUBLE, worst_compactness DOUBLE, worst_concavity DOUBLE, worst_concave_points DOUBLE, worst_symmetry DOUBLE, worst_fractal_dimension DOUBLE, target INTEGER, target_name VARCHAR)"
+      ],
+      "output_schema_evidence": "coverage/functions.json native static fields or dynamic-column rules; exact emitted selected shapes shown by executed notebook result tables",
+      "write_scope": null
+    },
+    {
+      "schema": "main",
+      "name": "california_housing",
+      "kind": "function",
+      "authentication": "none",
+      "access": "read",
+      "signatures": [
+        "california_housing() -> TABLE(sample_id INTEGER, medinc DOUBLE, houseage DOUBLE, averooms DOUBLE, avebedrms DOUBLE, population DOUBLE, aveoccup DOUBLE, latitude DOUBLE, longitude DOUBLE, median_house_value DOUBLE)"
+      ],
+      "output_schema_evidence": "coverage/functions.json native static fields or dynamic-column rules; exact emitted selected shapes shown by executed notebook result tables",
+      "write_scope": null
+    },
+    {
+      "schema": "main",
+      "name": "cross_val_predict",
+      "kind": "function",
+      "authentication": "none",
+      "access": "read",
+      "signatures": [
+        "cross_val_predict(data TABLE, target VARCHAR, params VARCHAR, id VARCHAR, estimator VARCHAR, cv BIGINT) -> TABLE(dynamic; full schema rules in exported vgi.result_dynamic_columns_md)"
+      ],
+      "output_schema_evidence": "coverage/functions.json native static fields or dynamic-column rules; exact emitted selected shapes shown by executed notebook result tables",
+      "write_scope": null
+    },
+    {
+      "schema": "main",
+      "name": "cross_val_score",
+      "kind": "function",
+      "authentication": "none",
+      "access": "read",
+      "signatures": [
+        "cross_val_score(data TABLE, target VARCHAR, params VARCHAR, id VARCHAR, estimator VARCHAR, cv BIGINT) -> TABLE(fold INTEGER, score DOUBLE, metric VARCHAR)"
+      ],
+      "output_schema_evidence": "coverage/functions.json native static fields or dynamic-column rules; exact emitted selected shapes shown by executed notebook result tables",
+      "write_scope": null
+    },
+    {
+      "schema": "main",
+      "name": "diabetes",
+      "kind": "function",
+      "authentication": "none",
+      "access": "read",
+      "signatures": [
+        "diabetes() -> TABLE(sample_id INTEGER, age DOUBLE, sex DOUBLE, bmi DOUBLE, bp DOUBLE, s1 DOUBLE, s2 DOUBLE, s3 DOUBLE, s4 DOUBLE, s5 DOUBLE, s6 DOUBLE, progression DOUBLE)"
+      ],
+      "output_schema_evidence": "coverage/functions.json native static fields or dynamic-column rules; exact emitted selected shapes shown by executed notebook result tables",
+      "write_scope": null
+    },
+    {
+      "schema": "main",
+      "name": "drop_model",
+      "kind": "function",
+      "authentication": "none",
+      "access": "write",
+      "signatures": [
+        "drop_model(model_name VARCHAR) -> TABLE(model_name VARCHAR, dropped BOOLEAN)"
+      ],
+      "output_schema_evidence": "coverage/functions.json native static fields or dynamic-column rules; exact emitted selected shapes shown by executed notebook result tables",
+      "write_scope": "Named-model deletion"
+    },
+    {
+      "schema": "main",
+      "name": "explain",
+      "kind": "function",
+      "authentication": "none",
+      "access": "read",
+      "signatures": [
+        "explain(data TABLE, model_name VARCHAR, model BLOB, id VARCHAR) -> TABLE(dynamic; full schema rules in exported vgi.result_dynamic_columns_md)"
+      ],
+      "output_schema_evidence": "coverage/functions.json native static fields or dynamic-column rules; exact emitted selected shapes shown by executed notebook result tables",
+      "write_scope": null
+    },
+    {
+      "schema": "main",
+      "name": "feature_importance",
+      "kind": "function",
+      "authentication": "none",
+      "access": "read",
+      "signatures": [
+        "feature_importance(model_name VARCHAR, model BLOB, importance_type VARCHAR) -> TABLE(feature VARCHAR, importance DOUBLE, rank INTEGER)"
+      ],
+      "output_schema_evidence": "coverage/functions.json native static fields or dynamic-column rules; exact emitted selected shapes shown by executed notebook result tables",
+      "write_scope": null
+    },
+    {
+      "schema": "main",
+      "name": "fit",
+      "kind": "function",
+      "authentication": "none",
+      "access": "write",
+      "signatures": [
+        "fit(data TABLE, target VARCHAR, params VARCHAR, model_name VARCHAR, id VARCHAR, estimator VARCHAR) -> TABLE(model_name VARCHAR, estimator VARCHAR, task VARCHAR, n_samples BIGINT, n_features BIGINT, n_classes BIGINT, n_categorical BIGINT, train_score DOUBLE, features VARCHAR[], model BLOB)"
+      ],
+      "output_schema_evidence": "coverage/functions.json native static fields or dynamic-column rules; exact emitted selected shapes shown by executed notebook result tables",
+      "write_scope": "Optional named-model local registry persistence"
+    },
+    {
+      "schema": "main",
+      "name": "fit_lgbm_classifier",
+      "kind": "function",
+      "authentication": "none",
+      "access": "write",
+      "signatures": [
+        "fit_lgbm_classifier(data TABLE, subsample DOUBLE, reg_lambda DOUBLE, target VARCHAR, reg_alpha DOUBLE, n_estimators BIGINT, max_depth BIGINT, model_name VARCHAR, random_state BIGINT, num_leaves BIGINT, min_child_samples BIGINT, objective VARCHAR, id VARCHAR, learning_rate DOUBLE, colsample_bytree DOUBLE, boosting_type VARCHAR) -> TABLE(model_name VARCHAR, estimator VARCHAR, task VARCHAR, n_samples BIGINT, n_features BIGINT, n_classes BIGINT, n_categorical BIGINT, train_score DOUBLE, features VARCHAR[], model BLOB)"
+      ],
+      "output_schema_evidence": "coverage/functions.json native static fields or dynamic-column rules; exact emitted selected shapes shown by executed notebook result tables",
+      "write_scope": "Optional named-model local registry persistence"
+    },
+    {
+      "schema": "main",
+      "name": "fit_lgbm_regressor",
+      "kind": "function",
+      "authentication": "none",
+      "access": "write",
+      "signatures": [
+        "fit_lgbm_regressor(data TABLE, subsample DOUBLE, reg_lambda DOUBLE, target VARCHAR, reg_alpha DOUBLE, n_estimators BIGINT, max_depth BIGINT, model_name VARCHAR, random_state BIGINT, num_leaves BIGINT, min_child_samples BIGINT, objective VARCHAR, id VARCHAR, learning_rate DOUBLE, colsample_bytree DOUBLE, boosting_type VARCHAR) -> TABLE(model_name VARCHAR, estimator VARCHAR, task VARCHAR, n_samples BIGINT, n_features BIGINT, n_classes BIGINT, n_categorical BIGINT, train_score DOUBLE, features VARCHAR[], model BLOB)"
+      ],
+      "output_schema_evidence": "coverage/functions.json native static fields or dynamic-column rules; exact emitted selected shapes shown by executed notebook result tables",
+      "write_scope": "Optional named-model local registry persistence"
+    },
+    {
+      "schema": "main",
+      "name": "grid_search",
+      "kind": "function",
+      "authentication": "none",
+      "access": "write",
+      "signatures": [
+        "grid_search(data TABLE, subsample DOUBLE[], reg_lambda DOUBLE[], target VARCHAR, reg_alpha DOUBLE[], random_state BIGINT[], n_estimators BIGINT[], num_leaves BIGINT[], min_child_samples BIGINT[], max_depth BIGINT[], learning_rate DOUBLE[], objective VARCHAR[], id VARCHAR, estimator VARCHAR, boosting_type VARCHAR[], cv BIGINT, colsample_bytree DOUBLE[]) -> TABLE(params VARCHAR, mean_score DOUBLE, std_score DOUBLE, rank INTEGER, metric VARCHAR, model BLOB)"
+      ],
+      "output_schema_evidence": "coverage/functions.json native static fields or dynamic-column rules; exact emitted selected shapes shown by executed notebook result tables",
+      "write_scope": "Optional named-model local registry persistence"
+    },
+    {
+      "schema": "main",
+      "name": "iris",
+      "kind": "function",
+      "authentication": "none",
+      "access": "read",
+      "signatures": [
+        "iris() -> TABLE(sample_id INTEGER, sepal_length_cm DOUBLE, sepal_width_cm DOUBLE, petal_length_cm DOUBLE, petal_width_cm DOUBLE, target INTEGER, target_name VARCHAR)"
+      ],
+      "output_schema_evidence": "coverage/functions.json native static fields or dynamic-column rules; exact emitted selected shapes shown by executed notebook result tables",
+      "write_scope": null
+    },
+    {
+      "schema": "main",
+      "name": "make_classification",
+      "kind": "function",
+      "authentication": "none",
+      "access": "read",
+      "signatures": [
+        "make_classification(n_samples BIGINT, n_informative BIGINT, random_state BIGINT, n_features BIGINT, n_classes BIGINT) -> TABLE(dynamic; full schema rules in exported vgi.result_dynamic_columns_md)"
+      ],
+      "output_schema_evidence": "coverage/functions.json native static fields or dynamic-column rules; exact emitted selected shapes shown by executed notebook result tables",
+      "write_scope": null
+    },
+    {
+      "schema": "main",
+      "name": "make_regression",
+      "kind": "function",
+      "authentication": "none",
+      "access": "read",
+      "signatures": [
+        "make_regression(noise DOUBLE, n_samples BIGINT, n_informative BIGINT, random_state BIGINT, n_features BIGINT) -> TABLE(dynamic; full schema rules in exported vgi.result_dynamic_columns_md)"
+      ],
+      "output_schema_evidence": "coverage/functions.json native static fields or dynamic-column rules; exact emitted selected shapes shown by executed notebook result tables",
+      "write_scope": null
+    },
+    {
+      "schema": "main",
+      "name": "model_info",
+      "kind": "function",
+      "authentication": "none",
+      "access": "read",
+      "signatures": [
+        "model_info(model_name VARCHAR) -> TABLE(model_name VARCHAR, estimator VARCHAR, task VARCHAR, target_column VARCHAR, n_features BIGINT, n_categorical BIGINT, n_samples BIGINT, n_classes BIGINT, train_score DOUBLE, lightgbm_version VARCHAR, created_at VARCHAR, features VARCHAR[])"
+      ],
+      "output_schema_evidence": "coverage/functions.json native static fields or dynamic-column rules; exact emitted selected shapes shown by executed notebook result tables",
+      "write_scope": null
+    },
+    {
+      "schema": "main",
+      "name": "models",
+      "kind": "function",
+      "authentication": "none",
+      "access": "read",
+      "signatures": [
+        "models() -> TABLE(model_name VARCHAR, estimator VARCHAR, task VARCHAR, target_column VARCHAR, n_features BIGINT, n_categorical BIGINT, n_samples BIGINT, n_classes BIGINT, train_score DOUBLE, lightgbm_version VARCHAR, created_at VARCHAR, features VARCHAR[])"
+      ],
+      "output_schema_evidence": "coverage/functions.json native static fields or dynamic-column rules; exact emitted selected shapes shown by executed notebook result tables",
+      "write_scope": null
+    },
+    {
+      "schema": "main",
+      "name": "partial_dependence",
+      "kind": "function",
+      "authentication": "none",
+      "access": "read",
+      "signatures": [
+        "partial_dependence(data TABLE, model BLOB, model_name VARCHAR, grid_resolution BIGINT, feature VARCHAR) -> TABLE(feature_value DOUBLE, class BIGINT, partial_dependence DOUBLE)"
+      ],
+      "output_schema_evidence": "coverage/functions.json native static fields or dynamic-column rules; exact emitted selected shapes shown by executed notebook result tables",
+      "write_scope": null
+    },
+    {
+      "schema": "main",
+      "name": "permutation_importance",
+      "kind": "function",
+      "authentication": "none",
+      "access": "read",
+      "signatures": [
+        "permutation_importance(data TABLE, target VARCHAR, model BLOB, scoring VARCHAR, random_state BIGINT, n_repeats BIGINT, model_name VARCHAR) -> TABLE(feature VARCHAR, importance_mean DOUBLE, importance_std DOUBLE, rank INTEGER)"
+      ],
+      "output_schema_evidence": "coverage/functions.json native static fields or dynamic-column rules; exact emitted selected shapes shown by executed notebook result tables",
+      "write_scope": null
+    },
+    {
+      "schema": "main",
+      "name": "predict",
+      "kind": "function",
+      "authentication": "none",
+      "access": "read",
+      "signatures": [
+        "predict(data TABLE, with_proba BOOLEAN, output_margin BOOLEAN, model_name VARCHAR, pred_leaf BOOLEAN, model BLOB, id VARCHAR) -> TABLE(dynamic; full schema rules in exported vgi.result_dynamic_columns_md)"
+      ],
+      "output_schema_evidence": "coverage/functions.json native static fields or dynamic-column rules; exact emitted selected shapes shown by executed notebook result tables",
+      "write_scope": null
+    },
+    {
+      "schema": "main",
+      "name": "randomized_search",
+      "kind": "function",
+      "authentication": "none",
+      "access": "write",
+      "signatures": [
+        "randomized_search(data TABLE, subsample DOUBLE[], search_seed BIGINT, reg_lambda DOUBLE[], target VARCHAR, reg_alpha DOUBLE[], random_state BIGINT[], n_estimators BIGINT[], num_leaves BIGINT[], min_child_samples BIGINT[], max_depth BIGINT[], objective VARCHAR[], n_iter BIGINT, learning_rate DOUBLE[], id VARCHAR, estimator VARCHAR, boosting_type VARCHAR[], cv BIGINT, colsample_bytree DOUBLE[]) -> TABLE(params VARCHAR, mean_score DOUBLE, std_score DOUBLE, rank INTEGER, metric VARCHAR, model BLOB)"
+      ],
+      "output_schema_evidence": "coverage/functions.json native static fields or dynamic-column rules; exact emitted selected shapes shown by executed notebook result tables",
+      "write_scope": "Optional named-model local registry persistence"
+    },
+    {
+      "schema": "main",
+      "name": "wine",
+      "kind": "function",
+      "authentication": "none",
+      "access": "read",
+      "signatures": [
+        "wine() -> TABLE(sample_id INTEGER, alcohol DOUBLE, malic_acid DOUBLE, ash DOUBLE, alcalinity_of_ash DOUBLE, magnesium DOUBLE, total_phenols DOUBLE, flavanoids DOUBLE, nonflavanoid_phenols DOUBLE, proanthocyanins DOUBLE, color_intensity DOUBLE, hue DOUBLE, od280_od315_of_diluted_wines DOUBLE, proline DOUBLE, target INTEGER, target_name VARCHAR)"
+      ],
+      "output_schema_evidence": "coverage/functions.json native static fields or dynamic-column rules; exact emitted selected shapes shown by executed notebook result tables",
+      "write_scope": null
+    },
+    {
+      "schema": "main",
+      "name": "breast_cancer",
+      "kind": "table",
+      "authentication": "none",
+      "access": "read",
+      "signatures": [
+        "TABLE(sample_id INTEGER, mean_radius DOUBLE, mean_texture DOUBLE, mean_perimeter DOUBLE, mean_area DOUBLE, mean_smoothness DOUBLE, mean_compactness DOUBLE, mean_concavity DOUBLE, mean_concave_points DOUBLE, mean_symmetry DOUBLE, mean_fractal_dimension DOUBLE, radius_error DOUBLE, texture_error DOUBLE, perimeter_error DOUBLE, area_error DOUBLE, smoothness_error DOUBLE, compactness_error DOUBLE, concavity_error DOUBLE, concave_points_error DOUBLE, symmetry_error DOUBLE, fractal_dimension_error DOUBLE, worst_radius DOUBLE, worst_texture DOUBLE, worst_perimeter DOUBLE, worst_area DOUBLE, worst_smoothness DOUBLE, worst_compactness DOUBLE, worst_concavity DOUBLE, worst_concave_points DOUBLE, worst_symmetry DOUBLE, worst_fractal_dimension DOUBLE, target INTEGER, target_name VARCHAR)"
+      ],
+      "alias_of_same_named_function": true
+    },
+    {
+      "schema": "main",
+      "name": "california_housing",
+      "kind": "table",
+      "authentication": "none",
+      "access": "read",
+      "signatures": [
+        "TABLE(sample_id INTEGER, medinc DOUBLE, houseage DOUBLE, averooms DOUBLE, avebedrms DOUBLE, population DOUBLE, aveoccup DOUBLE, latitude DOUBLE, longitude DOUBLE, median_house_value DOUBLE)"
+      ],
+      "alias_of_same_named_function": true
+    },
+    {
+      "schema": "main",
+      "name": "diabetes",
+      "kind": "table",
+      "authentication": "none",
+      "access": "read",
+      "signatures": [
+        "TABLE(sample_id INTEGER, age DOUBLE, sex DOUBLE, bmi DOUBLE, bp DOUBLE, s1 DOUBLE, s2 DOUBLE, s3 DOUBLE, s4 DOUBLE, s5 DOUBLE, s6 DOUBLE, progression DOUBLE)"
+      ],
+      "alias_of_same_named_function": true
+    },
+    {
+      "schema": "main",
+      "name": "iris",
+      "kind": "table",
+      "authentication": "none",
+      "access": "read",
+      "signatures": [
+        "TABLE(sample_id INTEGER, sepal_length_cm DOUBLE, sepal_width_cm DOUBLE, petal_length_cm DOUBLE, petal_width_cm DOUBLE, target INTEGER, target_name VARCHAR)"
+      ],
+      "alias_of_same_named_function": true
+    },
+    {
+      "schema": "main",
+      "name": "models",
+      "kind": "table",
+      "authentication": "none",
+      "access": "read",
+      "signatures": [
+        "TABLE(model_name VARCHAR, estimator VARCHAR, task VARCHAR, target_column VARCHAR, n_features BIGINT, n_categorical BIGINT, n_samples BIGINT, n_classes BIGINT, train_score DOUBLE, lightgbm_version VARCHAR, created_at VARCHAR, features VARCHAR[])"
+      ],
+      "alias_of_same_named_function": true
+    },
+    {
+      "schema": "main",
+      "name": "wine",
+      "kind": "table",
+      "authentication": "none",
+      "access": "read",
+      "signatures": [
+        "TABLE(sample_id INTEGER, alcohol DOUBLE, malic_acid DOUBLE, ash DOUBLE, alcalinity_of_ash DOUBLE, magnesium DOUBLE, total_phenols DOUBLE, flavanoids DOUBLE, nonflavanoid_phenols DOUBLE, proanthocyanins DOUBLE, color_intensity DOUBLE, hue DOUBLE, od280_od315_of_diluted_wines DOUBLE, proline DOUBLE, target INTEGER, target_name VARCHAR)"
+      ],
+      "alias_of_same_named_function": true
+    }
+  ],
+  "launch": "uvx --python 3.13 --from git+https://github.com/Query-farm/vgi-lightgbm@v0.1.0 python lightgbm_release.py",
+  "runtime": "Haybarn2.0.0rc11",
+  "review_notes": "22logical named table-functions with six same-named physical table aliases. All functions, overloads, native arguments and complete exported static/dynamic column metadata retained. No views/COPY; optional registry-writing fit/search and destructive drop_model remain in denominator.11surfaces used in two focused narratives; all writes confined to a newly created temporary local model registry. Released tag peels to the exact current-main commit. All implementation, top-level worker, package and root-lock bytes identical; notebooks execute that exact released package plus SHA-verified unchanged entry module."
+}

@@ -1,65 +1,63 @@
-# Executed LightGBM calibration experiment
+# LightGBM examples
 
-[Do more trees fix predictions beyond the training range?](01_test_calibration_extrapolation.ipynb) fits a noise-free synthetic calibration rule through SQL, keeps training and held-out subsets separate, measures error outside the training range, and verifies SHAP contribution reconstruction. The focused experiment increases boosting iterations from 20 to 80 while keeping all data fixed.
+Two independent notebooks audit local model behavior with invented inputs:
 
-## Run from this directory
+- [Do more trees fix predictions beyond the training range?](01_test_calibration_extrapolation.ipynb) preserves the calibration/extrapolation story and adds a complete disposable registry lifecycle: inspect the fitted model, reconcile its metadata, then delete it and verify repeat removal.
+- [Do gain, shuffle loss and average response tell the same story?](02_gain_shuffling_and_average_response.ipynb) generates a fixed regression sample, compares gain and permutation loss on separate scales, retains a constant-zero control and reconstructs a partial-dependence point with actual model predictions.
 
-Requirements: uv, Git, Python 3.13/3.14, network for first installation, and LightGBM's platform OpenMP runtime (libomp on macOS or libgomp on Linux). The verified workflow ran on macOS arm64. No service credentials, external dataset or global Jupyter kernel is needed.
+## Run locally or in Colab
 
-```sh
-cd notebooks
-uv sync --frozen
-uv run --frozen python execute.py --timeout 600
+Use a notebook's Colab badge and run all. Its bootstrap installs the base shared package and retrieves two immutable hash-verified companions. A local copy of this directory requires [uv](https://docs.astral.sh/uv/), Git and LightGBM's platform OpenMP runtime (`libomp` on macOS, `libgomp` on Linux):
+
+```bash
+uv sync --locked
+uv run --locked vgi-notebooks 01_test_calibration_extrapolation.ipynb
+uv run --locked vgi-notebooks 02_gain_shuffling_and_average_response.ipynb
 ```
 
-Copy this whole directory to run without the source checkout. Its separate lock pins published Haybarn **2.0.0rc11** and visualization dependencies. A temporary kernel uses the runner's interpreter with notebook-directory cwd. Successful outputs replace the notebook atomically; failed runs preserve the saved default.
+Local publication uses the shared `[runner]` extra. Colab installs only the base package, preserving preloaded kernel/Jupyter libraries. An optional interactive kernel:
 
-For interactive use:
-
-```sh
-uv run --frozen python -m ipykernel install --user --name vgi-lightgbm-notebooks --display-name 'Python (LightGBM notebooks)'
+```bash
+uv run --locked python -m ipykernel install --user --name vgi-lightgbm-notebooks --display-name 'Python (VGI LightGBM examples)'
 ```
 
-Use this kernel with cwd here; edit the visible parameter, restart and run all. Python setup, plotting and cleanup are folded. Analytical SQL, connection and useful outputs remain visible.
-
-## One focused experiment
-
-`N_ESTIMATORS=20` accepts integers 1–200. All other training settings and data stay fixed.
-
-```sh
-uv run --frozen python execute.py --timeout 600 --parameters '{"N_ESTIMATORS":80}' --output-dir artifacts/trees-80
-```
-
-Reset 20 for defaults. Overrides require a separate output directory. Successful copies receive helpers, launcher, assets, README, runner and environment. Artifacts and virtual environments are ignored. A fresh temporary model registry is isolated per run and deleted at cleanup; no model from an earlier notebook run is reused.
-
-## Literal portable launch
+Both books keep the published release visible:
 
 ```sql
-INSTALL vgi FROM community;
-LOAD vgi;
-ATTACH 'lightgbm' (TYPE vgi, LOCATION 'python3 worker_launcher.py');
+ATTACH 'lightgbm' (TYPE vgi, LOCATION 'uvx --python 3.13 --from git+https://github.com/Query-farm/vgi-lightgbm@v0.1.0 python lightgbm_release.py');
 ```
 
-The launcher fetches immutable **remote Git revision 48e4b113f4f80615aa7d9a6d54434035a2425961**, verifies checkout identity, and runs its unchanged `lightgbm_worker.py` entry point. The project wheel packages its implementation package but omits this top-level entry module, so the launcher retains the remote tree instead of relying on a missing installed command. It discovers no local worker source or `.venv` and builds no engine.
+The release wheel includes `vgi_lightgbm` but omits `lightgbm_worker.py` and a console entrypoint. The small worker-specific companion verifies that the installed Git package is exactly release commit **51375ea0956f0dcd6441754213d7726dc16f12db**, downloads only that unchanged top-level file from the fixed public commit, checks SHA256 **d57ba862014655608ddaef676c67a68fe8eed41c88770fcb8860ebdabf1e9fad**, and runs it against the installed implementation package. It accepts **no arguments**, arbitrary URLs, revisions or commands. No source checkout discovery, worker build or transitive dependency override is used.
 
-The worker runtime pins Python 3.13, vgi-python 0.51.1, vgi-rpc 0.53.1, PyArrow 26.0.1, LightGBM 4.6.0, scikit-learn 1.9.0, NumPy 2.5.0 and SciPy 1.18.0 through uvx. SDK 0.51.1 supports the published client's protocol 3.3; root lockfiles are preserved. The notebook environment is separate from that worker runtime.
+The entry cache defaults to `~/.cache/vgi-lightgbm-release`; `VGI_LIGHTGBM_RELEASE_CACHE` can select a dedicated cache directory. A bounded POSIX file lock and atomic write protect simultaneous starts, and every reuse rechecks file bytes. The launcher reports failures on stderr while worker stdout remains Arrow protocol. First use needs public packages/the fixed worker file and the published Haybarn/VGI extension. Inference and training are local; no account, API key or downloaded model is needed. Actual resolved package versions are [recorded](coverage/resolved-worker-packages.json); release dependency ranges can resolve differently later and upgrades need validation.
 
-A bounded lock and atomic installation protect `$XDG_CACHE_HOME/vgi-lightgbm-notebooks` (default `~/.cache/vgi-lightgbm-notebooks`); each reuse verifies all worker Python source hashes. A timed-out lock identifies the installer to inspect. First use needs network; later uses reuse verified source and uv caches. To upgrade, change revision/package pins deliberately and rerun default/experiment from an empty worker cache.
+Each notebook creates a fresh temporary local model registry, temporarily sets `LIGHTGBM_MODELS_DIR`, and restores the previous value after removing its own directory. SQL connections separately use a new empty temporary secret directory with persistent secrets disabled. No existing model registry or saved SQL credentials is opened. Named-model writes/deletion affect only notebook-created models.
 
-## Data, units and limits
+## Focused experiments
 
-Visible SQL authors 241 fixed grid points at 0.05 V intervals from 0 through 12 V, with reference response **2 mm + 3 mm/V × voltage**. Within 0–8 V, 129 rows train and 32 fixed rows are held out; 80 rows above 8 V test extrapolation. There is no real sensor, measurement noise, random sample, data download or physical validity claim. Fixed seed, row order and single-thread execution make the small experiment reproducible.
+```bash
+uv run --locked vgi-notebooks 01_test_calibration_extrapolation.ipynb \
+  --parameters '{"N_ESTIMATORS":80}' --output-dir artifacts/more-trees
+uv run --locked vgi-notebooks 02_gain_shuffling_and_average_response.ipynb \
+  --parameters '{"EVALUATION_SPLIT":"training"}' --output-dir artifacts/training-background
+```
 
-Fit receives only training rows and the voltage feature. ID and target columns are excluded from features. CREATE TABLE materializes the fit before capture, avoiding duplicate stateful calls. Prediction and explain run through the real worker; SQL joins references afterward, computes MAE/RMSE and verifies contribution sums. Python never trains a model or computes model predictions.
+The first changes 20 to 80 boosting iterations while preserving all 241 voltage/reference rows and their 129 training, 32 in-range held-out and 80 outside-range roles. The second switches 150 held-out evaluation rows to 450 training rows while preserving all 600 generated rows, training inputs, estimator settings, gain values and full-population model predictions. The partial-dependence grid can change with its background population. Packed model bytes include creation metadata, so raw model-BLOB hash identity is not claimed across independent runs.
 
-Error units are millimetres. Training error is not held-out performance. For this regression objective, base plus feature contributions reconstruct prediction; contributions are not causes or uncertainty estimates. The beyond-range grid is a separate condition, not evidence about arbitrary new data. Increasing trees does not make numeric tree splits extrapolate a linear physical law.
+The runner requires separate experiment destinations, rejects unknown parameters/unsafe paths, and preserves the saved default after failure. SVG charts and content-addressed GitHub images accompany the defaults; ignored artifacts contain logs, review PNGs and experiments.
 
-## Validation
+## Meaning and limits
 
-Validated with published Haybarn 2.0.0rc11 on 2026-11-14: default 5.3 s; standalone cold-source-cache default 30.3 s; separate 80-tree experiment 12.2 s. Each run executed 14 code cells, eight SQL cells, two charts and ten invariants. All four charts were inspected, three runner guards preserved the successful default, and two concurrent cold-cache attachments completed with one verified atomic source installation.
+The calibration rule is authored, noise-free **2 mm + 3 mm/V × voltage**. It is not a real sensor or physical law. Held-out grid error and outside-range error have distinct denominators. Regression SHAP contributions reconstruct model predictions in target units; they are not causes or uncertainty bounds.
 
-Increasing iterations 20→80 reduced in-range holdout MAE from 0.759 to 0.179 mm and beyond-range MAE from 8.393 to 6.440 mm. The beyond-range response stayed flat: its plateau moved from 23.68 to 25.64 mm. The reference and split were unchanged. Prediction-contribution reconciliation passed in both runs.
+The second sample comes from the worker's seeded regression generator: 600 rows, three generated features, two informative terms and noise standard deviation 5. The generator does not return its coefficients, so the notebook does not claim to identify the true informative feature names. SQL adds a constant-zero feature. Gain uses objective-dependent units; permutation uses negative MAE, so mean score loss is MAE increase in target units. Five-shuffle standard deviation is not a confidence interval, and small/zero/negative values remain in the table. Partial dependence is an averaged model query with one feature replaced, not an intervention or observed response. Changing evaluation population is a diagnostic comparison, not tuning or an independent accuracy estimate for training rows.
 
-Source checks passed: 63 unit tests (two existing sklearn feature-name warnings), all five SQLLogic test files through the repository’s real Haybarn/stdio runner (98 statement/query directives), Ruff, mypy and formatting. Both configured metadata gates passed: 100/100 L1 static and 100/100 L2 executed, zero errors/warnings and eight informational findings (title wording, dataset-ID foreign-key suggestions and plural naming). These are not a zero-finding result.
+## Coverage and validation
 
-The initial locked source environment used an older Haybarn and SDK 0.50.0; its five SQL files failed protocol routing. An environment-only override to published Haybarn 2.0.0rc11 and SDK 0.51.1 reran all units/SQL successfully. Root source and uv.lock remain unchanged; the notebook launcher explicitly pins the compatible runtime.
+The actual complete release catalog contains **22 logical named surfaces**: 22 function rows and six same-named physical table aliases. There are no views or COPY handlers. Registry-writing fits/search and `drop_model` remain in the denominator. These two stories meaningfully cover **11/22**, meeting the required 11. The 11 uncovered names are `iris`, `wine`, `breast_cancer`, `diabetes`, `california_housing`, `make_classification`, `fit_lgbm_classifier`, `cross_val_predict`, `cross_val_score`, `grid_search` and `randomized_search`. A startup smoke on iris is not counted as narrative coverage.
+
+[coverage.json](coverage.json) binds full native catalogs/arguments, static/dynamic schema metadata, visible SQL, interpreted results and successful execution receipts. Release v0.1.0 peels to the exact current-main source commit **51375ea0956f0dcd6441754213d7726dc16f12db**; both catalogs and receipts use that full revision, so **11/22 is exact released and exact current runtime coverage** for the audited source. Proper heading title/subtitle come from actual catalog metadata.
+
+The books contain ten and twelve SQL invariants respectively, plus six registry assertions in the first. Defaults and separate experiments execute the actual release. Two simultaneous attachments passed from an empty entry-file cache. Detached notebook runs and a fresh Python 3.12 kernel start with empty companion/entry caches; the kernel preloads eight plotting/Jupyter libraries and checks unchanged versions plus `pip check`. These are macOS ARM/Colab-compatible setup checks, not manual hosted-Colab UI, Linux or Windows execution. Upstream native OpenMP was already installed on the validation host. All default/experiment figures are reviewed and published SVG bytes verified.
+
+Worker code and root dependencies remain unchanged; [green source CI](https://github.com/Query-farm/vgi-lightgbm/actions/runs/43615456249) is reused. The separate existing [deployment workflow failure](https://github.com/Query-farm/vgi-lightgbm/actions/runs/43615457355) is retained as baseline evidence and is neither retried nor addressed by notebook work. No worker rebuild, repeated full source suite, deployment or container publication is requested. [STANDARD.md](STANDARD.md) links the shared standard.

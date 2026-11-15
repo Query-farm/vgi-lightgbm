@@ -1,0 +1,10 @@
+{
+  "vgi-lightgbm": "0.1.0",
+  "vgi-python": "0.51.1",
+  "vgi-rpc": "0.53.1",
+  "lightgbm": "4.7.0",
+  "scikit-learn": "1.9.1",
+  "numpy": "2.5.4",
+  "scipy": "1.18.1",
+  "pyarrow": "26.0.1"
+}
