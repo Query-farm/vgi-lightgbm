@@ -8,7 +8,10 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## 0.1.1 (2026-11-16)
 
-- Bump vgi-python to 0.52.2.
+- Bump vgi-python to 0.52.2 (`>=0.52.2,<0.53`, Dockerfile and Makefile too).
+- Python 3.14 (requires-python floor, CI, Docker image and tooling).
+- SQL integration tests run on every transport (stdio, launch, http) through
+  the starter's `ci/run-integration.sh`; `make check` runs all three.
 
 ## [0.1.0] - 2026-11-14
 
