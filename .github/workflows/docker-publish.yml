@@ -5,14 +5,13 @@
 # the shared reusable workflow Query-farm/vgi-actions; this file gates on the
 # repo's own test suite and supplies the worker-specific inputs.
 #
-# Tag-driven: vX.Y.Z -> :X.Y.Z/:X.Y/:latest, push to main -> :edge. Decoupled
+# Tag-driven: vX.Y.Z -> :X.Y.Z/:X.Y/:latest, release tags only; :edge is no longer published. Decoupled
 # from the PyPI publish. Publishing a GitHub Release creates the tag, which
 # fires this too.
 name: Publish image to ghcr.io
 
 on:
   push:
-    branches: [main]
     tags: ['v*.*.*']
   workflow_dispatch:
 
