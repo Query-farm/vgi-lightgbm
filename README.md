@@ -72,6 +72,8 @@ Each piece is mapped to the VGI primitive that fits its data flow:
   model's fitted feature columns by name (input order is irrelevant, extra columns
   are ignored) and errors if a required feature column is missing.
 
+vgi-lightgbm 0.2.0 speaks VGI protocol 3.4, so it needs Haybarn 2.0.1 or newer (Haybarn 2.0.0 loads a 3.3 `vgi` extension that cannot attach it).
+
 ## Model BLOBs and the registry
 
 `fit` (and the typed `fit_lgbm_*` functions) **always return the trained model as

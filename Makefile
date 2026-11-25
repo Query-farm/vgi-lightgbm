@@ -15,7 +15,7 @@
 # `vgi` extension, over stdio, launch (AF_UNIX, pooled) and http, with an isolated
 # model registry per run. CI runs the same script per transport. ci/worker execs
 # the venv interpreter on lightgbm_worker.py.
-HAYBARN_VERSION  ?= 2.0.0rc11
+HAYBARN_VERSION  ?= 2.0.1rc3
 WORKER           ?= $(CURDIR)/ci/worker
 TOOLS            := $(CURDIR)/.tools
 HAYBARN_UNITTEST := $(TOOLS)/bin/haybarn-unittest
@@ -30,7 +30,7 @@ FLY_APP        ?= vgi-lightgbm
 venv:
 	uv venv --python 3.14
 	uv pip install --python .venv \
-		"vgi-python[http,oauth]>=0.52.2,<0.53" \
+		"vgi-python[http,oauth]>=0.55.2,<0.56" \
 		"vgi-rpc[sentry]>=0.53.1" \
 		"lightgbm>=4.0" "scikit-learn>=1.5" numpy \
 		pytest ruff mypy haybarn
